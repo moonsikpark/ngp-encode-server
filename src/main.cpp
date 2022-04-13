@@ -226,6 +226,16 @@ int main(int argc, char **argv)
 
         tlog::info() << "Done bootstrapping.";
 
+        /* temporary muxing setup */
+
+        AVFormatContext *fmtctx;
+        AVStream *stream;
+
+        avformat_alloc_output_context2(&fmtctx, NULL, "rtsp", get(rtsp_server_flag).c_str());
+        avcodec_get_context_defaults3(stream->codec, ectx->codec);
+
+        /* temporary muxing setup end */
+
         int ret;
 
         // TODO: Start a socket server thread from this point.
