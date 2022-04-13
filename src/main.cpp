@@ -32,6 +32,7 @@ extern "C"
 #include <libavutil/opt.h>
 #include <libavutil/time.h>
 #include <libavfilter/avfilter.h>
+#include <libavformat/avformat.h>
 }
 
 using namespace args;
