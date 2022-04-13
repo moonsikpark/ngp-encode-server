@@ -229,11 +229,13 @@ int main(int argc, char **argv)
 
         /* temporary muxing setup */
 
-        AVFormatContext *fmtctx;
-        AVStream *stream;
+        AVFormatContext *fmt_ctx;
+        AVStream *st;
+        AVCodecContext *c;
 
-        avformat_alloc_output_context2(&fmtctx, NULL, "rtsp", get(rtsp_server_flag).c_str());
-        avcodec_get_context_defaults3(stream->codec, ectx->codec);
+        avformat_alloc_output_context2(&fmt_ctx, NULL, "rtsp", get(rtsp_server_flag).c_str());
+        st = avformat_new_stream(fmt_ctx, NULL);
+        c = avcodec_alloc_context3(ectx->codec);
 
         /* temporary muxing setup end */
 
@@ -336,6 +338,8 @@ int main(int argc, char **argv)
         socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
+
+        avformat_free_context(fmt_ctx);
     }
     catch (const std::exception &e)
     {
