@@ -229,15 +229,31 @@ int main(int argc, char **argv)
 
         /* temporary muxing setup */
 
-        AVFormatContext *fmt_ctx;
-        AVStream *st;
-        AVCodecContext *c;
+        AVFormatContext *oc;
 
-        avformat_alloc_output_context2(&fmt_ctx, NULL, "rtsp", get(rtsp_server_flag).c_str());
-        st = avformat_new_stream(fmt_ctx, NULL);
-        c = avcodec_alloc_context3(ectx->codec);
-        av_dump_format(fmt_ctx, 0, get(rtsp_server_flag).c_str(), 1);
-        if (avformat_write_header(fmt_ctx, NULL) < 0) // TODO: Specify muxer options
+        AVStream *st;
+
+        st = av_new_stream(oc, 0);
+        if (!st)
+        {
+            tlog::error() << "Could not alloc stream.";
+        }
+
+        avformat_alloc_output_context2(&oc, NULL, "rtsp", get(rtsp_server_flag).c_str());
+
+        st->codec->codec_id = AV_CODEC_ID_H264;
+        st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+
+        st->codec->bit_rate = 400000;
+        st->codec->width = width;
+        st->codec->height = height;
+        st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+        st->codec->time_base = (AVRational){1, 15};
+        st->codec->pix_fmt = AV_PIX_FMT_YUV420P;
+
+        av_dump_format(oc, 0, get(rtsp_server_flag).c_str(), 1);
+
+        if (avformat_write_header(oc, NULL) < 0) // TODO: Specify muxer options
         {
             tlog::error() << "Failed to write header.";
         }
