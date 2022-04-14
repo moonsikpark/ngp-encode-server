@@ -343,7 +343,7 @@ int main(int argc, char **argv)
                     tlog::info() << "Got packet " << ectx->pkt->pts << " (size=" << ectx->pkt->size << ")";
                     ret = fwrite(ectx->pkt->data, 1, ectx->pkt->size, f);
                     ret = write(pctx->pipe, ectx->pkt->data, ectx->pkt->size);
-                    ret = av_interleaved_write_frame(oc, &ectx->pkt);
+                    ret = av_interleaved_write_frame(oc, ectx->pkt);
                 }
             }
 
