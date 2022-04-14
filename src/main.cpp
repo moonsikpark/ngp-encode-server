@@ -322,9 +322,9 @@ int main(int argc, char **argv)
             // TODO: manually calculate pts and apply
             // frame->pts = (1.0 / 30) * 90 * frame_count;
 
-            frame_duration = ectx->codec->time_base.den / 15;
+            frame_duration = ectx->ctx->time_base.den / 15;
             frame_time = frame_count * frame_duration;
-            ectx->pkt->pts = frame_time / ectx->codec->time_base.num;
+            ectx->pkt->pts = frame_time / ectx->ctx->time_base.num;
             ectx->pkt->duration = frame_duration;
             ectx->pkt->dts = ectx->pkt->pts;
             // ectx->pkt->dts = ectx->pkt->pts = av_rescale_q(av_gettime(), ectx->ctx->time_base, ectx->ctx->time_base);
