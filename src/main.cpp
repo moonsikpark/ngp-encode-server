@@ -231,6 +231,8 @@ int main(int argc, char **argv)
 
         AVFormatContext *oc;
 
+        avformat_alloc_output_context2(&oc, NULL, "rtsp", get(rtsp_server_flag).c_str());
+
         AVStream *st;
 
         st = avformat_new_stream(oc, ectx->codec);
@@ -238,8 +240,6 @@ int main(int argc, char **argv)
         {
             tlog::error() << "Could not alloc stream.";
         }
-
-        avformat_alloc_output_context2(&oc, NULL, "rtsp", get(rtsp_server_flag).c_str());
 
         st->codec->codec_id = AV_CODEC_ID_H264;
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
