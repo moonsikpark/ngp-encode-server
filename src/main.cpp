@@ -233,7 +233,7 @@ int main(int argc, char **argv)
 
         AVStream *st;
 
-        st = avformat_new_stream(oc, 0);
+        st = avformat_new_stream(oc, ectx->codec);
         if (!st)
         {
             tlog::error() << "Could not alloc stream.";
@@ -358,7 +358,6 @@ int main(int argc, char **argv)
         socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
-
         avformat_free_context(oc);
     }
     catch (const std::exception &e)
