@@ -237,7 +237,10 @@ int main(int argc, char **argv)
         st = avformat_new_stream(fmt_ctx, NULL);
         c = avcodec_alloc_context3(ectx->codec);
         av_dump_format(fmt_ctx, 0, get(rtsp_server_flag).c_str(), 1);
-
+        if (avformat_write_header(fmt_ctx, &(ectx->options)) < 0)
+        {
+            tlog::error() << "Failed to write header.";
+        }
         /* temporary muxing setup end */
 
         int ret;
