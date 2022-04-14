@@ -241,15 +241,15 @@ int main(int argc, char **argv)
             tlog::error() << "Could not alloc stream.";
         }
 
-        st->codec->codec_id = AV_CODEC_ID_H264;
-        st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+        st->codecpar->codec_id = AV_CODEC_ID_H264;
+        st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
 
-        st->codec->bit_rate = 400000;
-        st->codec->width = width;
-        st->codec->height = height;
-        st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-        st->codec->time_base = (AVRational){1, 15};
-        st->codec->pix_fmt = AV_PIX_FMT_YUV420P;
+        st->codecpar->bit_rate = 400000;
+        st->codecpar->width = width;
+        st->codecpar->height = height;
+        st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+        st->codecpar->time_base = (AVRational){1, 15};
+        st->codecpar->pix_fmt = AV_PIX_FMT_YUV420P;
 
         av_dump_format(oc, 0, get(rtsp_server_flag).c_str(), 1);
 
