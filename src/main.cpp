@@ -248,8 +248,8 @@ int main(int argc, char **argv)
         st->codecpar->width = width;
         st->codecpar->height = height;
         st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-        st->codecpar->time_base = (AVRational){1, 15};
-        st->codecpar->pix_fmt = AV_PIX_FMT_YUV420P;
+        st->time_base = (AVRational){1, 15};
+        st->codecpar->format = AV_PIX_FMT_YUV420P;
 
         av_dump_format(oc, 0, get(rtsp_server_flag).c_str(), 1);
 
