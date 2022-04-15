@@ -248,7 +248,8 @@ int main(int argc, char **argv)
         st->codecpar->width = width;
         st->codecpar->height = height;
         st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-        st->time_base = (AVRational){1, 15};
+        // h264's clock rate is 90kHz.
+        st->time_base = (AVRational){1, 90000};
         st->codecpar->format = AV_PIX_FMT_YUV420P;
 
         av_dump_format(oc, 0, get(rtsp_server_flag).c_str(), 1);
