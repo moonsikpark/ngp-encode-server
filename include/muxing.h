@@ -8,8 +8,7 @@
 #ifndef _MUXING_H_
 #define _MUXING_H_
 
-#include <common.h>
-
+#include <encode.h>
 extern "C"
 {
 #include <libavformat/avformat.h>

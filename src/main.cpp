@@ -5,8 +5,9 @@
  *  @author Moonsik Park, Korean Institute of Science and Technology
  **/
 
-#include <string>
 #include <csignal>
+#include <thread>
+#include <functional>
 
 #include <common.h>
 #include <server.h>
@@ -279,6 +280,13 @@ int main(int argc, char **argv)
         std::string outname = "out.mp4";
         FILE *f = fopen(outname.c_str(), "wb");
 
+        bool threads_stop_running = false;
+
+        std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ectx), std::ref(*mctx), std::ref(threads_stop_running));
+        // TODO: Don't detach thread, instead join.
+        // If we detach the thread, we don't know whether it is still healthy.
+        _receive_packet_thread.detach();
+
         // Start a receive and encode loop.
         // TODO: Threadify this portion.
         while (keep_running)
@@ -322,34 +330,6 @@ int main(int argc, char **argv)
             // encode frame
             // TODO: send frame and receive packet in seperate thread.
             ret = avcodec_send_frame(ectx->ctx, ectx->frame);
-            // TODO: Seperatly process eagain and eof.
-            if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF && ret != 0)
-            {
-                throw std::runtime_error{"Error encoding frame."};
-            }
-            else
-            {
-                ret = avcodec_receive_packet(ectx->ctx, ectx->pkt);
-                if (ret < 0)
-                {
-                    if (!(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF))
-                    {
-                        throw std::runtime_error{"Error receiving packet."};
-                    }
-                }
-                else
-                {
-                    ectx->pkt->dts = ectx->pkt->pts = av_rescale_q(frame_count, ectx->ctx->time_base, (AVRational){1, 90000});
-                    // TODO: manually calculate pts and apply
-                    // frame->pts = (1.0 / 30) * 90 * frame_count;
-                    tlog::info() << "Got packet pts=" << ectx->pkt->pts << " dts=" << ectx->pkt->dts << " (size=" << ectx->pkt->size << ")";
-                    ret = fwrite(ectx->pkt->data, 1, ectx->pkt->size, f);
-                    if (pipe_flag) {
-                        ret = write(pctx->pipe, ectx->pkt->data, ectx->pkt->size);
-                    }
-                    ret = av_interleaved_write_frame(mctx->oc, ectx->pkt);
-                }
-            }
 
             progress.update(1);
             tlog::success() << "Render and encode loop " << frame_count << " done after " << tlog::durationToString(progress.duration());
@@ -359,7 +339,8 @@ int main(int argc, char **argv)
         tlog::info() << "Shutting down";
         fclose(f);
         encode_context_free(ectx);
-        if (pipe_flag) {
+        if (pipe_flag)
+        {
             pipe_free(pctx);
         }
         socket_context_free(sctx);

@@ -26,6 +26,10 @@ typedef struct
 } EncodeContext;
 
 EncodeContext *encode_context_init(uint32_t width, uint32_t height, AVCodecID codec_id, std::string encode_preset, std::string encode_tune, int bit_rate, int fps);
+
+#include <muxing.h>
+
+void receive_packet_thread(EncodeContext ectx, MuxingContext mctx, bool threads_stop_running);
 void encode_raw_image_to_frame(EncodeContext *ectx, int width, int height, uint8_t *image_buffer);
 int encode_context_free(EncodeContext *ectx);
 
