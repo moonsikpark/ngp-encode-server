@@ -107,7 +107,7 @@ int main(int argc, char **argv)
         ValueFlag<uint32_t> cache_size_flag{
             parser,
             "CACHE_SIZE",
-            "Size of cache per image in megabytes.",
+            "Size of cache per image in megabytes. default: 50 MB",
             {"cache_size"},
             50,
         };
@@ -193,7 +193,7 @@ int main(int argc, char **argv)
          */
         uint32_t width = get(width_flag);
         uint32_t height = get(height_flag);
-        uint8_t *imagebuf = (uint8_t *)malloc(sizeof(uint8_t) * width * height * 4);
+        uint8_t *imagebuf = (uint8_t *)malloc(get(cache_size_flag) * 1000 * 1000);
 
         uint64_t frame_count = 0;
 
