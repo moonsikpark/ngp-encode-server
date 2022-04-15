@@ -69,6 +69,13 @@ int main(int argc, char **argv)
             {'v', "version"},
         };
 
+        Flag pipe_flag{
+            parser,
+            "PIPE",
+            "Pipe video to named pipe.",
+            {"pipe"},
+        };
+
         ValueFlag<std::string> address_flag{
             parser,
             "ADDRESS",
@@ -82,7 +89,7 @@ int main(int argc, char **argv)
             "ENCODE_PRESET",
             "Encode preset {ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow (default), placebo}",
             {'p', "encode_preset"},
-            "veryslow",
+            "ultrafast",
         };
 
         ValueFlag<std::string> encode_tune_flag{
@@ -204,15 +211,19 @@ int main(int argc, char **argv)
             // TODO: Handle error.
             return 0;
         }
+        NamedPipeContext *pctx;
 
-        tlog::info() << "Initalizing named pipe...";
-        NamedPipeContext *pctx = pipe_init(get(pipe_location_flag));
-
-        if (!pctx)
+        if (pipe_flag)
         {
-            tlog::error() << "Failed to initalize named pipe.";
-            // TODO: Handle error.
-            return 0;
+            tlog::info() << "Initalizing named pipe...";
+            pctx = pipe_init(get(pipe_location_flag));
+
+            if (!pctx)
+            {
+                tlog::error() << "Failed to initalize named pipe.";
+                // TODO: Handle error.
+                return 0;
+            }
         }
 
         tlog::info() << "Initalizing socket server...";
@@ -337,12 +348,15 @@ int main(int argc, char **argv)
                 }
                 else
                 {
-                    tlog::info() << "Got packet " << ectx->pkt->pts << " (size=" << ectx->pkt->size << ")";
+                    ectx->pkt->dts = av_rescale_q(av_gettime(), av_get_time_base_q(), ectx->ctx->time_base);
+                    ectx->pkt->pts = av_rescale_q(av_gettime(), av_get_time_base_q(), ectx->ctx->time_base);
                     // TODO: manually calculate pts and apply
                     // frame->pts = (1.0 / 30) * 90 * frame_count;
-                    ectx->pkt->dts = ectx->pkt->pts = av_rescale_q(av_gettime(), av_get_time_base_q(), ectx->ctx->time_base);
+                    tlog::info() << "Got packet pts=" << ectx->pkt->pts << " dts=" << ectx->pkt->dts << " (size=" << ectx->pkt->size << ")";
                     ret = fwrite(ectx->pkt->data, 1, ectx->pkt->size, f);
-                    ret = write(pctx->pipe, ectx->pkt->data, ectx->pkt->size);
+                    if (pipe_flag) {
+                        ret = write(pctx->pipe, ectx->pkt->data, ectx->pkt->size);
+                    }
                     ret = av_interleaved_write_frame(oc, ectx->pkt);
                 }
             }
@@ -360,7 +374,9 @@ int main(int argc, char **argv)
         }
         fclose(f);
         encode_context_free(ectx);
-        pipe_free(pctx);
+        if (pipe_flag) {
+            pipe_free(pctx);
+        }
         socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
