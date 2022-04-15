@@ -37,16 +37,18 @@ extern "C"
 
 using namespace args;
 
-volatile std::sig_atomic_t signal_status;
+static volatile std::sig_atomic_t keep_running = 1;
 
 void signal_handler(int signum)
 {
     tlog::info() << "Ctrl+C received. Quitting.";
-    signal_status = signum;
+    keep_running = 0;
 }
 
 int main(int argc, char **argv)
 {
+    
+    signal(SIGINT, signal_handler);
     try
     {
         ArgumentParser parser{
@@ -97,7 +99,7 @@ int main(int argc, char **argv)
             "ENCODE_TUNE",
             "Encode tune {film, animation, grain, stillimage, fastdecode, zerolatency (default), psnr, ssim}",
             {'t', "encode_tune"},
-            "zerolatency",
+            "stillimage,zerolatency",
         };
 
         ValueFlag<uint32_t> cache_size_flag{
@@ -147,6 +149,7 @@ int main(int argc, char **argv)
             {"rtsp_server"},
             "rtsp://localhost:8554/stream1",
         };
+
 
         try
         {
@@ -259,8 +262,7 @@ int main(int argc, char **argv)
         st->codecpar->width = width;
         st->codecpar->height = height;
         st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-        // h264's clock rate is 90kHz.
-        st->time_base = (AVRational){1, 90000};
+        st->time_base = (AVRational){1, 15};
         st->codecpar->format = AV_PIX_FMT_YUV420P;
 
         av_dump_format(oc, 0, get(rtsp_server_flag).c_str(), 1);
@@ -283,7 +285,7 @@ int main(int argc, char **argv)
 
         // Start a receive and encode loop.
         // TODO: Threadify this portion.
-        while (1)
+        while (keep_running)
         {
             // Measure elapsed time for the loop to run.
             auto progress = tlog::progress(1);
@@ -299,13 +301,6 @@ int main(int argc, char **argv)
                 .dy = 0,
                 .dz = 0};
             RequestResponse resp;
-
-            if (signal_status)
-            {
-                tlog::info() << "Ctrl+C received. Quitting.";
-                break;
-                // TODO: Send command to clients to abort and exit.
-            }
 
             tlog::info() << "Sending Request to client: width=" << req.width << " height=" << req.height << " rotx=" << req.rotx << " roty=" << req.roty << " dx=" << req.dx << " dy=" << req.dy << " dz=" << req.dz;
 
@@ -348,8 +343,7 @@ int main(int argc, char **argv)
                 }
                 else
                 {
-                    ectx->pkt->dts = av_rescale_q(av_gettime(), av_get_time_base_q(), ectx->ctx->time_base);
-                    ectx->pkt->pts = av_rescale_q(av_gettime(), av_get_time_base_q(), ectx->ctx->time_base);
+                    ectx->pkt->dts = ectx->pkt->pts = av_rescale_q(frame_count, ectx->ctx->time_base, (AVRational){1, 90000});
                     // TODO: manually calculate pts and apply
                     // frame->pts = (1.0 / 30) * 90 * frame_count;
                     tlog::info() << "Got packet pts=" << ectx->pkt->pts << " dts=" << ectx->pkt->dts << " (size=" << ectx->pkt->size << ")";

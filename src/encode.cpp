@@ -33,7 +33,7 @@ EncodeContext *encode_context_init(uint32_t width, uint32_t height, AVCodecID co
     ectx->ctx->width = width;
     ectx->ctx->height = height;
     // h264's clock rate is 90kHz.
-    ectx->ctx->time_base = (AVRational){1, 90000};
+    ectx->ctx->time_base = (AVRational){1, fps};
     ectx->ctx->pix_fmt = AV_PIX_FMT_YUV420P;
 
     av_dict_set(&(ectx->options), "preset", encode_preset.c_str(), 0);
