@@ -128,6 +128,22 @@ int main(int argc, char **argv)
             720,
         };
 
+        ValueFlag<uint32_t> bitrate_flag{
+            parser,
+            "BITRATE",
+            "Bitrate of output stream.",
+            {"bitrate"},
+            400000,
+        };
+
+        ValueFlag<uint32_t> fps_flag{
+            parser,
+            "FPS",
+            "Frame per second of output stream. This does not guarantee that n frames will be present.",
+            {"fps"},
+            15,
+        };
+
         // TODO: Remove named pipe.
         ValueFlag<std::string> pipe_location_flag{
             parser,
@@ -198,7 +214,7 @@ int main(int argc, char **argv)
         uint64_t frame_count = 0;
 
         tlog::info() << "Initalizing encoder...";
-        EncodeContext *ectx = encode_context_init(width, height, AV_CODEC_ID_H264, get(encode_preset_flag), get(encode_tune_flag), 400000, 15);
+        EncodeContext *ectx = encode_context_init(width, height, AV_CODEC_ID_H264, get(encode_preset_flag), get(encode_tune_flag), get(bitrate_flag), get(fps_flag));
 
         if (!ectx)
         {
