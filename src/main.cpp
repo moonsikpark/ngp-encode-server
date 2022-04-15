@@ -257,39 +257,17 @@ int main(int argc, char **argv)
             return 0;
         }
 
+        tlog::info() << "Initalizing muxing context...";
+        MuxingContext *mctx = muxing_context_init(ectx, get(rtsp_server_flag));
+
+        if (!sctx)
+        {
+            tlog::error() << "Failed to initalize socket server.";
+            // TODO: Handle error.
+            return 0;
+        }
+
         tlog::info() << "Done bootstrapping.";
-
-        /* temporary muxing setup */
-
-        AVFormatContext *oc;
-
-        avformat_alloc_output_context2(&oc, NULL, "rtsp", get(rtsp_server_flag).c_str());
-
-        AVStream *st;
-
-        st = avformat_new_stream(oc, ectx->codec);
-        if (!st)
-        {
-            tlog::error() << "Could not alloc stream.";
-        }
-
-        st->codecpar->codec_id = AV_CODEC_ID_H264;
-        st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-
-        st->codecpar->bit_rate = 400000;
-        st->codecpar->width = width;
-        st->codecpar->height = height;
-        st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-        st->time_base = (AVRational){1, 15};
-        st->codecpar->format = AV_PIX_FMT_YUV420P;
-
-        av_dump_format(oc, 0, get(rtsp_server_flag).c_str(), 1);
-
-        if (avformat_write_header(oc, NULL) < 0) // TODO: Specify muxer options
-        {
-            tlog::error() << "Failed to write header.";
-        }
-        /* temporary muxing setup end */
 
         int ret;
 
@@ -369,7 +347,7 @@ int main(int argc, char **argv)
                     if (pipe_flag) {
                         ret = write(pctx->pipe, ectx->pkt->data, ectx->pkt->size);
                     }
-                    ret = av_interleaved_write_frame(oc, ectx->pkt);
+                    ret = av_interleaved_write_frame(mctx->oc, ectx->pkt);
                 }
             }
 
@@ -379,11 +357,6 @@ int main(int argc, char **argv)
         }
 
         tlog::info() << "Shutting down";
-
-        if (av_write_trailer(oc) < 0)
-        {
-            tlog::error() << "Failed to write trailer.";
-        }
         fclose(f);
         encode_context_free(ectx);
         if (pipe_flag) {
@@ -392,7 +365,7 @@ int main(int argc, char **argv)
         socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
-        avformat_free_context(oc);
+        muxing_context_free(mctx);
     }
     catch (const std::exception &e)
     {

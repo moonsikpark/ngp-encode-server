@@ -14,6 +14,7 @@
 
 #include <encode.h>
 #include <encode_text.h>
+#include <muxing.h>
 #include <server.h>
 
 #include <tinylogger/tinylogger.h>
