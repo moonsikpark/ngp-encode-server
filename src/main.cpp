@@ -317,10 +317,6 @@ int main(int argc, char **argv)
 
             // The image is ready to be sent to the encoder at this point.
 
-            // TODO: manually calculate pts and apply
-            // frame->pts = (1.0 / 30) * 90 * frame_count;
-            ectx->pkt->dts = ectx->pkt->pts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, ectx->ctx->time_base);
-
             // encode frame
             // TODO: send frame and receive packet in seperate thread.
             ret = avcodec_send_frame(ectx->ctx, ectx->frame);
@@ -342,6 +338,9 @@ int main(int argc, char **argv)
                 else
                 {
                     tlog::info() << "Got packet " << ectx->pkt->pts << " (size=" << ectx->pkt->size << ")";
+                    // TODO: manually calculate pts and apply
+                    // frame->pts = (1.0 / 30) * 90 * frame_count;
+                    ectx->pkt->dts = ectx->pkt->pts = av_rescale_q(av_gettime(), av_get_time_base_q(), ectx->ctx->time_base);
                     ret = fwrite(ectx->pkt->data, 1, ectx->pkt->size, f);
                     ret = write(pctx->pipe, ectx->pkt->data, ectx->pkt->size);
                     ret = av_interleaved_write_frame(oc, ectx->pkt);
