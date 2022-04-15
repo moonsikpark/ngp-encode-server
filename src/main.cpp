@@ -98,11 +98,12 @@ int main(int argc, char **argv)
         ValueFlag<std::string> encode_tune_flag{
             parser,
             "ENCODE_TUNE",
-            "Encode tune {film, animation, grain, stillimage, fastdecode, zerolatency (default), psnr, ssim}",
+            "Encode tune {film, animation, grain, stillimage, fastdecode, zerolatency, psnr, ssim}. default: stillimage,zerolatency",
             {'t', "encode_tune"},
             "stillimage,zerolatency",
         };
 
+        // TODO: evaluate and support variable resolution rendering.
         ValueFlag<uint32_t> cache_size_flag{
             parser,
             "CACHE_SIZE",
@@ -119,20 +120,21 @@ int main(int argc, char **argv)
             1280,
         };
 
-        ValueFlag<std::string> pipe_location_flag{
-            parser,
-            "PIPE_LOCATION",
-            "Location of named pipe to output video stream.",
-            {"pipe_location"},
-            "/tmp/videofifo",
-        };
-
         ValueFlag<uint32_t> height_flag{
             parser,
             "HEIGHT",
             "Height of requesting image.",
             {"height"},
             720,
+        };
+
+        // TODO: Remove named pipe.
+        ValueFlag<std::string> pipe_location_flag{
+            parser,
+            "PIPE_LOCATION",
+            "Location of named pipe to output video stream.",
+            {"pipe_location"},
+            "/tmp/videofifo",
         };
 
         ValueFlag<std::string> font_flag{
@@ -150,7 +152,6 @@ int main(int argc, char **argv)
             {"rtsp_server"},
             "rtsp://localhost:8554/stream1",
         };
-
 
         try
         {
