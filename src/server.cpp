@@ -13,38 +13,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-NamedPipeContext *pipe_init(std::string pipe_location)
-{
-    tlog::info() << "Creating pipe.";
-
-    NamedPipeContext *pctx = (NamedPipeContext *)malloc(sizeof(NamedPipeContext));
-    pctx->pipe_location = pipe_location.c_str();
-
-    unlink(pctx->pipe_location);
-    if (mkfifo(pctx->pipe_location, 0666) < 0)
-    {
-        throw std::runtime_error{"Failed to make named pipe: " + std::string(std::strerror(errno))};
-    }
-
-    // pipe = open(fifo_name, O_WRONLY | O_NONBLOCK);
-    pctx->pipe = open(pctx->pipe_location, O_WRONLY);
-    if (pctx->pipe < 0)
-    {
-        throw std::runtime_error{"Failed to open named pipe: " + std::string(std::strerror(errno))};
-    }
-
-    return pctx;
-}
-
-int pipe_free(NamedPipeContext *pctx)
-{
-    close(pctx->pipe);
-    unlink(pctx->pipe_location);
-    free(pctx);
-
-    return 0;
-}
-
 SocketContext *socket_context_init(std::string socket_location)
 {
     int ret;

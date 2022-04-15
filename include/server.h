@@ -14,15 +14,6 @@
 
 typedef struct
 {
-    int pipe;
-    const char *pipe_location;
-} NamedPipeContext;
-
-NamedPipeContext *pipe_init(std::string pipe_location);
-int pipe_free(NamedPipeContext *pctx);
-
-typedef struct
-{
     uint32_t cache_size;
     int concurrent_connection;
     struct sockaddr_un addr;

@@ -73,13 +73,6 @@ int main(int argc, char **argv)
             {'v', "version"},
         };
 
-        Flag pipe_flag{
-            parser,
-            "PIPE",
-            "Pipe video to named pipe.",
-            {"pipe"},
-        };
-
         ValueFlag<std::string> address_flag{
             parser,
             "ADDRESS",
@@ -233,20 +226,6 @@ int main(int argc, char **argv)
             // TODO: Handle error.
             return 0;
         }
-        NamedPipeContext *pctx;
-
-        if (pipe_flag)
-        {
-            tlog::info() << "Initalizing named pipe...";
-            pctx = pipe_init(get(pipe_location_flag));
-
-            if (!pctx)
-            {
-                tlog::error() << "Failed to initalize named pipe.";
-                // TODO: Handle error.
-                return 0;
-            }
-        }
 
         tlog::info() << "Initalizing socket server...";
         SocketContext *sctx = socket_context_init(get(address_flag));
@@ -275,10 +254,6 @@ int main(int argc, char **argv)
         // TODO: Start a socket server thread from this point.
         tlog::info() << "Waiting for client to connect.";
         socket_context_wait_for_client_blocking(sctx);
-
-        // TODO: Either remove the file output or use a context.
-        std::string outname = "out.mp4";
-        FILE *f = fopen(outname.c_str(), "wb");
 
         bool threads_stop_running = false;
 
@@ -337,12 +312,7 @@ int main(int argc, char **argv)
         }
 
         tlog::info() << "Shutting down";
-        fclose(f);
         encode_context_free(ectx);
-        if (pipe_flag)
-        {
-            pipe_free(pctx);
-        }
         socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
