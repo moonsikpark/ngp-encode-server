@@ -313,7 +313,7 @@ int main(int argc, char **argv)
             socket_receive_blocking(sctx, (uint8_t *)imagebuf, resp.filesize);
 
             // Render a string on top of the received view.
-            render_string(etctx, imagebuf, width, height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
+            encode_textctx_render_string_to_image(etctx, imagebuf, width, height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
 
             encode_raw_image_to_frame(ectx, width, height, imagebuf);
 

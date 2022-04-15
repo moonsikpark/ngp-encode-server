@@ -51,7 +51,7 @@ EncodeTextContext *encode_textctx_init(std::string font_location)
     return etctx;
 }
 
-void render_string(EncodeTextContext *etctx, uint8_t *surface, int width, int height, RenderPositionOption opt, std::string content)
+void encode_textctx_render_string_to_image(EncodeTextContext *etctx, uint8_t *surface, int width, int height, RenderPositionOption opt, std::string content)
 {
     int ret;
     FT_GlyphSlot slot = etctx->face->glyph; /* a small shortcut */
