@@ -47,8 +47,9 @@ void signal_handler(int signum)
 
 int main(int argc, char **argv)
 {
-    
+    // TODO: Use POSIX standard sigaction(2)
     signal(SIGINT, signal_handler);
+
     try
     {
         ArgumentParser parser{
