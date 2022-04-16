@@ -257,6 +257,9 @@ int main(int argc, char **argv)
 
         bool threads_stop_running = false;
 
+        // std::thread _socket_server_thread(socket_server_thread, std::ref(*sctx), std::ref(frame_queue), std::ref(threads_stop_running));
+        // _socket_server_thread.detach();
+
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ectx), std::ref(*mctx), std::ref(threads_stop_running));
         // TODO: Don't detach thread, instead join.
         // If we detach the thread, we don't know whether it is still healthy.
@@ -280,6 +283,7 @@ int main(int argc, char **argv)
                 .dy = 0,
                 .dz = 0};
             RequestResponse resp;
+            RenderedFrame r{frame_count, width, height, AV_PIX_FMT_BGR32};
 
             tlog::info() << "Sending Request to client: width=" << req.width << " height=" << req.height << " rotx=" << req.rotx << " roty=" << req.roty << " dx=" << req.dx << " dy=" << req.dy << " dz=" << req.dz;
 
@@ -293,19 +297,20 @@ int main(int argc, char **argv)
             tlog::success() << "Received RequestResponse from client: filesize=" << resp.filesize;
 
             // Receive the rendered view.
-            socket_receive_blocking(sctx, (uint8_t *)imagebuf, resp.filesize);
+            socket_receive_blocking(sctx, r.buffer(), resp.filesize);
 
             // Render a string on top of the received view.
-            encode_textctx_render_string_to_image(etctx, imagebuf, width, height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
+            encode_textctx_render_string_to_image(etctx, r.buffer(), width, height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
 
-            encode_raw_image_to_frame(ectx, width, height, imagebuf);
+            // encode_raw_image_to_frame(ectx, width, height, imagebuf);
+
+            r.convert_frame(ectx->ctx);
 
             // The image is ready to be sent to the encoder at this point.
 
             // encode frame
             // TODO: send frame and receive packet in seperate thread.
-            ret = avcodec_send_frame(ectx->ctx, ectx->frame);
-
+            ret = avcodec_send_frame(ectx->ctx, r.frame());
             progress.update(1);
             tlog::success() << "Render and encode loop " << frame_count << " done after " << tlog::durationToString(progress.duration());
             frame_count++;

@@ -129,6 +129,7 @@ void receive_packet_thread(EncodeContext ectx, MuxingContext mctx, bool threads_
         case AVERROR(EAGAIN): // output is not available in the current state - user must try to send input
             continue;
         case 0:
+            // TODO: can we set packet's dts and/or pts when we draw an avframe?
             pkt->pts = pkt->dts = av_rescale_q(frame_count, ectx.ctx->time_base, h264_timebase);
             // TODO: add more info to print
             tlog::info() << "receive_packet_thread: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
