@@ -84,6 +84,10 @@ public:
             0,
             0,
             0);
+        if (!this->_sws_ctx)
+        {
+            throw std::runtime_error{"Failed to allocate sws_context."};
+        }
 
         if (av_image_alloc(this->_frame->data, this->_frame->linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
         {
