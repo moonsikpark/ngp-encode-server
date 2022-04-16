@@ -94,7 +94,6 @@ public:
             tlog::error("Failed to allocate frame data.");
         }
 
-        // uint8_t *in_data[1] = {(uint8_t *)this->_buf->data()};
         uint8_t *in_data[1] = {(uint8_t *)this->_buf.get()};
         int in_linesize[1] = {4 * (int)this->_width};
 
@@ -121,7 +120,7 @@ public:
 
     const AVFrame *frame() const
     {
-        if (!_processed)
+        if (!this->_processed)
         {
             throw std::runtime_error{"Tried to access a non-processed AVFrame in RenderedFrame."};
         }
@@ -130,7 +129,7 @@ public:
 
     ~RenderedFrame()
     {
-        if (_processed)
+        if (this->_processed)
         {
             sws_freeContext(this->_sws_ctx);
         }
