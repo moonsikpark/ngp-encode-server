@@ -105,7 +105,6 @@ int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
     ssize_t ret;
     ssize_t sent = 0;
 
-    auto progress = tlog::progress(size);
     while (sent < size)
     {
         ret = write(clientfd, buf + sent, size - sent);
@@ -115,10 +114,8 @@ int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
             return (int)ret;
         }
         sent += ret;
-        progress.update(sent);
     }
-    // todo: duration miliseconds
-    tlog::success() << "Successfully sent data to socket after " << tlog::durationToString(progress.duration());
+    tlog::success() << "Successfully sent data to socket.";
 
     return 0;
 }
@@ -128,7 +125,6 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, uint32_t size)
     ssize_t ret;
     uint32_t recv = 0;
 
-    auto progress = tlog::progress(size);
     while (recv < size)
     {
         ret = read(clientfd, buf + recv, size - recv);
@@ -143,9 +139,8 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, uint32_t size)
             return -1;
         }
         recv += ret;
-        progress.update(recv);
     }
-    tlog::success() << "Successfully received data from socket after " << tlog::durationToString(progress.duration());
+    tlog::success() << "Successfully received data from socket.";
 
     return 0;
 }
