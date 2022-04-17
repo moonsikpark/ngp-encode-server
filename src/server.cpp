@@ -65,6 +65,7 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
     while (keep_running)
     {
+        // TODO: measure how much this loop takes.
         if (threads_stop_running)
         {
             break;
@@ -115,15 +116,14 @@ int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
         }
         sent += ret;
     }
-    tlog::success() << "Successfully sent data to socket.";
 
     return 0;
 }
 
-int socket_receive_blocking(int clientfd, uint8_t *buf, uint32_t size)
+int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
 {
     ssize_t ret;
-    uint32_t recv = 0;
+    ssize_t recv = 0;
 
     while (recv < size)
     {
@@ -140,7 +140,6 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, uint32_t size)
         }
         recv += ret;
     }
-    tlog::success() << "Successfully received data from socket.";
 
     return 0;
 }
