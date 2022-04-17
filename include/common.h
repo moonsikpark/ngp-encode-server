@@ -14,6 +14,8 @@
 #include <mutex>
 #include <queue>
 #include <condition_variable>
+#include <thread>
+#include <chrono>
 
 #include <encode.h>
 #include <encode_text.h>
@@ -23,7 +25,6 @@
 
 typedef struct
 {
-    uint64_t index;
     uint32_t width;
     uint32_t height;
     float rotx;
@@ -40,28 +41,28 @@ typedef struct
 
 class RenderedFrame
 {
-    uint64_t _order;
+    uint64_t _index;
     uint32_t _width;
     uint32_t _height;
     std::unique_ptr<uint8_t> _buf;
-    AVFrame *_frame;
     AVPixelFormat _pix_fmt;
     struct SwsContext *_sws_ctx;
     bool _processed;
 
 public:
-    RenderedFrame(uint64_t order, uint32_t width, uint32_t height, AVPixelFormat pix_fmt)
+    RenderedFrame(uint64_t index, uint32_t width, uint32_t height, AVPixelFormat pix_fmt)
     {
-        this->_order = order;
+        this->_index = index;
         this->_width = width;
         this->_height = height;
         this->_buf = std::unique_ptr<uint8_t>(new uint8_t[width * height * 4]);
-        this->_frame = av_frame_alloc();
         this->_pix_fmt = pix_fmt;
         this->_processed = false;
     }
+    RenderedFrame() = default;
+    RenderedFrame(RenderedFrame &&r) = default;
 
-    void convert_frame(const AVCodecContext *ctx)
+    void convert_frame(const AVCodecContext *ctx, AVFrame *frame)
     {
         if (this->_processed)
         {
@@ -69,9 +70,9 @@ public:
         }
 
         // Set context of AVFrame
-        this->_frame->format = ctx->pix_fmt;
-        this->_frame->width = ctx->width;
-        this->_frame->height = ctx->height;
+        frame->format = ctx->pix_fmt;
+        frame->width = ctx->width;
+        frame->height = ctx->height;
 
         // TODO: specify flags
         this->_sws_ctx = sws_getContext(
@@ -85,12 +86,13 @@ public:
             0,
             0,
             0);
+
         if (!this->_sws_ctx)
         {
             throw std::runtime_error{"Failed to allocate sws_context."};
         }
 
-        if (av_image_alloc(this->_frame->data, this->_frame->linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
+        if (av_image_alloc(frame->data, frame->linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
         {
             tlog::error("Failed to allocate frame data.");
         }
@@ -103,29 +105,20 @@ public:
                   in_linesize,
                   0,
                   this->_height,
-                  this->_frame->data,
-                  this->_frame->linesize);
+                  frame->data,
+                  frame->linesize);
 
         this->_processed = true;
     }
 
-    const uint64_t &order() const
+    const uint64_t &index() const
     {
-        return this->_order;
+        return this->_index;
     }
 
     uint8_t *buffer() const
     {
         return this->_buf.get();
-    }
-
-    const AVFrame *frame() const
-    {
-        if (!this->_processed)
-        {
-            throw std::runtime_error{"Tried to access a non-processed AVFrame in RenderedFrame."};
-        }
-        return this->_frame;
     }
 
     ~RenderedFrame()
@@ -134,7 +127,6 @@ public:
         {
             sws_freeContext(this->_sws_ctx);
         }
-        av_frame_free(&this->_frame);
     }
 };
 
