@@ -23,6 +23,7 @@
 
 typedef struct
 {
+    uint64_t index;
     uint32_t width;
     uint32_t height;
     float rotx;
