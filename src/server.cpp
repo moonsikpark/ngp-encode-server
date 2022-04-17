@@ -13,40 +13,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-SocketContext *socket_context_init(std::string socket_location)
-{
-    int ret;
-    SocketContext *sctx = (SocketContext *)malloc(sizeof(SocketContext));
-    const char *socket_loc = socket_location.c_str();
-
-    unlink(socket_loc);
-
-    ret = (sctx->sockfd = socket(AF_UNIX, SOCK_STREAM, 0));
-    if (ret < 0)
-    {
-        throw std::runtime_error{"Failed to create socket: " + std::string(std::strerror(errno))};
-    }
-
-    memset(&(sctx->addr), 0, sizeof(sctx->addr));
-    sctx->addr.sun_family = AF_UNIX;
-    strncpy(sctx->addr.sun_path, socket_loc, sizeof(sctx->addr.sun_path) - 1);
-
-    ret = bind(sctx->sockfd, (struct sockaddr *)&(sctx->addr), sizeof(sctx->addr));
-
-    if (ret < 0)
-    {
-        throw std::runtime_error{"Failed to bind to socket: " + std::string(std::strerror(errno))};
-    }
-
-    ret = listen(sctx->sockfd, sctx->concurrent_connection);
-    if (ret < 0)
-    {
-        throw std::runtime_error{"Failed to listen to socket: " + std::string(std::strerror(errno))};
-    }
-
-    return sctx;
-}
-
 // TODO: Gracefully close the socket.
 void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running)
 {
@@ -131,15 +97,9 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
     }
 }
 
-void socket_context_wait_for_client_blocking(SocketContext *sctx)
-{
-    if ((sctx->client = accept(sctx->sockfd, NULL, NULL)) < 0)
-    {
-        throw std::runtime_error{"Failed to accept the connection: " + std::string(std::strerror(errno))};
-    }
-}
-
 // TODO: Gracefully close the socket.
+//    close(sctx->client);
+//    close(sctx->sockfd);
 int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
 {
     ssize_t ret;
@@ -186,15 +146,6 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, uint32_t size)
         progress.update(recv);
     }
     tlog::success() << "Successfully received data from socket after " << tlog::durationToString(progress.duration());
-
-    return 0;
-}
-
-int socket_context_free(SocketContext *sctx)
-{
-    close(sctx->client);
-    close(sctx->sockfd);
-    free(sctx);
 
     return 0;
 }

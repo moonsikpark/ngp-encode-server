@@ -226,17 +226,7 @@ int main(int argc, char **argv)
             // TODO: Handle error.
             return 0;
         }
-        /*
-        tlog::info() << "Initalizing socket server...";
-        SocketContext *sctx = socket_context_init(get(address_flag));
 
-        if (!sctx)
-        {
-            tlog::error() << "Failed to initalize socket server.";
-            // TODO: Handle error.
-            return 0;
-        }
-        */
         tlog::info() << "Initalizing muxing context...";
         MuxingContext *mctx = muxing_context_init(ectx, get(rtsp_server_flag));
 
@@ -276,35 +266,6 @@ int main(int argc, char **argv)
         {
             // Measure elapsed time for the loop to run.
             auto progress = tlog::progress(1);
-            /*
-
-            // TODO: Expose an interface to set these values.
-            // TODO: Enable variable resolution rendering.
-            Request req = {
-                .width = width,
-                .height = height,
-                .rotx = 1,
-                .roty = 0,
-                .dx = -1,
-                .dy = 0,
-                .dz = 0};
-            RequestResponse resp;
-            RenderedFrame r{frame_count, width, height, AV_PIX_FMT_BGR32};
-
-            tlog::info() << "Sending Request to client: width=" << req.width << " height=" << req.height << " rotx=" << req.rotx << " roty=" << req.roty << " dx=" << req.dx << " dy=" << req.dy << " dz=" << req.dz;
-
-            // Send request for a frame.
-            socket_send_blocking(sctx, (uint8_t *)&req, sizeof(req));
-
-            // Wait for response of the request.
-            // TODO: We should also get width and height from the client.
-            socket_receive_blocking(sctx, (uint8_t *)&resp, sizeof(resp));
-
-            tlog::success() << "Received RequestResponse from client: filesize=" << resp.filesize;
-
-            // Receive the rendered view.
-            socket_receive_blocking(sctx, r.buffer(), resp.filesize);
-            */
 
             RenderedFrame r = queue.pop();
             // Render a string on top of the received view.
@@ -326,7 +287,6 @@ int main(int argc, char **argv)
 
         tlog::info() << "Shutting down";
         encode_context_free(ectx);
-        // socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
         muxing_context_free(mctx);
