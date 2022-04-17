@@ -260,8 +260,8 @@ int main(int argc, char **argv)
         ThreadSafeQueue<RenderedFrame> queue(1000);
         ThreadSafeQueue<Request> req_frame(1000);
 
-        std::thread _socket_accept_thread(socket_accept_thread, std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
-        _socket_accept_thread.detach();
+        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
+        _socket_main_thread.detach();
 
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ectx), std::ref(*mctx), std::ref(threads_stop_running));
         // TODO: Don't detach thread, instead join.
@@ -326,7 +326,7 @@ int main(int argc, char **argv)
 
         tlog::info() << "Shutting down";
         encode_context_free(ectx);
-        socket_context_free(sctx);
+        // socket_context_free(sctx);
         free(imagebuf);
         encode_textctx_free(etctx);
         muxing_context_free(mctx);

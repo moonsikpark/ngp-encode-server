@@ -23,7 +23,7 @@ typedef struct
 } SocketContext;
 
 SocketContext *socket_context_init(std::string socket_location);
-void socket_accept_thread(SocketContext sctx, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running);
+void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running);
 void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running);
 void socket_context_wait_for_client_blocking(SocketContext *sctx);
 int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size);
