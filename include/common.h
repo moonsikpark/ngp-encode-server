@@ -137,6 +137,47 @@ public:
     }
 };
 
+template <class T>
+class ThreadSafeQueue
+{
+private:
+    unsigned int _max_size;
+    std::queue<T> _queue;
+    std::condition_variable _consumer, _producer;
+    std::mutex _mutex;
+
+    using unique_lock = std::unique_lock<std::mutex>;
+
+public:
+    ThreadSafeQueue(unsigned int max_size)
+    {
+        this->_max_size = max_size;
+    }
+
+    void push(T &&t)
+    {
+        unique_lock lock(this->_mutex);
+        this->_producer.wait(lock, [&]
+                             { return this->_queue.size() < this->_max_size; });
+        this->_queue.push(std::move(t));
+        _consumer.notify_one();
+    }
+
+    T pop()
+    {
+        unique_lock lock(this->_mutex);
+        this->_consumer.wait(lock, [&]
+                             { return this->_queue.size() > 0; });
+        T item = std::move(this->_queue.front());
+        if (this->_queue.size() == this->_max_size)
+        {
+            this->_producer.notify_all();
+        }
+        this->_queue.pop();
+        return item;
+    }
+};
+
 #include <server.h>
 
 #endif // _COMMON_H_
