@@ -253,17 +253,22 @@ int main(int argc, char **argv)
 
         // TODO: Start a socket server thread from this point.
         tlog::info() << "Waiting for client to connect.";
-        socket_context_wait_for_client_blocking(sctx);
+        // socket_context_wait_for_client_blocking(sctx);
 
         bool threads_stop_running = false;
 
-        // std::thread _socket_server_thread(socket_server_thread, std::ref(*sctx), std::ref(frame_queue), std::ref(threads_stop_running));
-        // _socket_server_thread.detach();
+        ThreadSafeQueue<RenderedFrame> queue(1000);
+        ThreadSafeQueue<Request> req_frame(1000);
+
+        std::thread _socket_accept_thread(socket_accept_thread, std::ref(*sctx), std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
+        _socket_accept_thread.detach();
 
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ectx), std::ref(*mctx), std::ref(threads_stop_running));
         // TODO: Don't detach thread, instead join.
         // If we detach the thread, we don't know whether it is still healthy.
         _receive_packet_thread.detach();
+
+        AVFrame *frm = av_frame_alloc();
 
         // Start a receive and encode loop.
         // TODO: Threadify this portion.
@@ -271,6 +276,7 @@ int main(int argc, char **argv)
         {
             // Measure elapsed time for the loop to run.
             auto progress = tlog::progress(1);
+            /*
 
             // TODO: Expose an interface to set these values.
             // TODO: Enable variable resolution rendering.
@@ -298,19 +304,21 @@ int main(int argc, char **argv)
 
             // Receive the rendered view.
             socket_receive_blocking(sctx, r.buffer(), resp.filesize);
+            */
 
+            RenderedFrame r = queue.pop();
             // Render a string on top of the received view.
             encode_textctx_render_string_to_image(etctx, r.buffer(), width, height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
 
             // encode_raw_image_to_frame(ectx, width, height, imagebuf);
 
-            r.convert_frame(ectx->ctx);
+            r.convert_frame(ectx->ctx, frm);
 
             // The image is ready to be sent to the encoder at this point.
 
             // encode frame
             // TODO: send frame and receive packet in seperate thread.
-            ret = avcodec_send_frame(ectx->ctx, r.frame());
+            ret = avcodec_send_frame(ectx->ctx, frm);
             progress.update(1);
             tlog::success() << "Render and encode loop " << frame_count << " done after " << tlog::durationToString(progress.duration());
             frame_count++;
@@ -322,6 +330,7 @@ int main(int argc, char **argv)
         free(imagebuf);
         encode_textctx_free(etctx);
         muxing_context_free(mctx);
+        av_frame_free(&frm);
     }
     catch (const std::exception &e)
     {
