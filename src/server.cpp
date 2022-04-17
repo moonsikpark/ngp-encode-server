@@ -48,24 +48,47 @@ SocketContext *socket_context_init(std::string socket_location)
 }
 
 // TODO: Gracefully close the socket.
-void socket_accept_thread(SocketContext sctx, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running)
+void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running)
 {
-    int ret;
+
+    tlog::info() << "socket_main_thread: Initalizing socket server...";
+    struct sockaddr_un addr;
+    int sockfd, clientfd;
     bool keep_running = true;
+
+    const char *socket_loc = socket_location.c_str();
+
+    unlink(socket_loc);
+
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+    {
+        throw std::runtime_error{"socket_main_thread: Failed to create socket: " + std::string(std::strerror(errno))};
+    }
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socket_loc, sizeof(addr.sun_path) - 1);
+
+    if ((bind(sockfd, (struct sockaddr *)&(addr), sizeof(addr))) < 0)
+    {
+        throw std::runtime_error{"socket_main_thread: Failed to bind to socket: " + std::string(std::strerror(errno))};
+    }
+
+    // TODO: How much should backlog be?
+    if ((listen(sockfd, 1)) < 0)
+    {
+        throw std::runtime_error{"Failed to listen to socket: " + std::string(std::strerror(errno))};
+    }
+    tlog::success() << "socket_main_thread: Socket server created and listening.";
 
     while (keep_running)
     {
-        tlog::info() << "socket_accept_thread: Waiting for client to connect.";
-        if ((ret = accept(sctx.sockfd, NULL, NULL)) > 0)
+        if ((clientfd = accept(sockfd, NULL, NULL)) < 0)
         {
-            tlog::info() << "socket_accept_thread: Received client connection (clientfd=" << ret << "). Spawning thread.";
-            std::thread _socket_client_thread(socket_client_thread, ret, std::ref(req_queue), std::ref(frame_queue), std::ref(threads_stop_running));
-            _socket_client_thread.detach();
+            throw std::runtime_error{"socket_main_thread: Failed to accept client: " + std::string(std::strerror(errno))};
         }
-        else
-        {
-            throw std::runtime_error{"socket_accept_thread:Failed to accept client: " + std::string(std::strerror(errno))};
-        }
+        std::thread _socket_client_thread(socket_client_thread, clientfd, std::ref(req_queue), std::ref(frame_queue), std::ref(threads_stop_running));
+        _socket_client_thread.detach();
+        tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
     }
 }
 
@@ -80,6 +103,7 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
         {
             break;
         }
+        // TODO: Get request from request queue.
         // Request req = req_queue.pop();
 
         Request req = {

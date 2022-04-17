@@ -226,7 +226,7 @@ int main(int argc, char **argv)
             // TODO: Handle error.
             return 0;
         }
-
+        /*
         tlog::info() << "Initalizing socket server...";
         SocketContext *sctx = socket_context_init(get(address_flag));
 
@@ -236,13 +236,13 @@ int main(int argc, char **argv)
             // TODO: Handle error.
             return 0;
         }
-
+        */
         tlog::info() << "Initalizing muxing context...";
         MuxingContext *mctx = muxing_context_init(ectx, get(rtsp_server_flag));
 
-        if (!sctx)
+        if (!mctx)
         {
-            tlog::error() << "Failed to initalize socket server.";
+            tlog::error() << "Failed to initalize muxing context";
             // TODO: Handle error.
             return 0;
         }
@@ -260,7 +260,7 @@ int main(int argc, char **argv)
         ThreadSafeQueue<RenderedFrame> queue(1000);
         ThreadSafeQueue<Request> req_frame(1000);
 
-        std::thread _socket_accept_thread(socket_accept_thread, std::ref(*sctx), std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
+        std::thread _socket_accept_thread(socket_accept_thread, std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
         _socket_accept_thread.detach();
 
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ectx), std::ref(*mctx), std::ref(threads_stop_running));
