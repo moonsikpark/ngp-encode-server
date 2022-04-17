@@ -122,6 +122,7 @@ void receive_packet_thread(EncodeContext ectx, MuxingContext mctx, bool threads_
             break;
         }
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         // XXX: Each and every access to AVCodecContext should be protected.
         // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
         ret = avcodec_receive_packet(ectx.ctx, pkt);
