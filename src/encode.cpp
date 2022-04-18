@@ -6,7 +6,6 @@
  **/
 
 #include <common.h>
-#include <encode.h>
 
 std::string averror_explain(int err)
 {
