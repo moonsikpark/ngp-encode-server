@@ -49,9 +49,14 @@ public:
         }
     }
 
-    AVFormatContext *get_ctx()
+    AVFormatContext *get_fctx()
     {
         return this->_fctx;
+    }
+
+    AVStream *get_stream()
+    {
+        return this->_st;
     }
 
     ~MuxingContext()

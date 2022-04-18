@@ -57,7 +57,6 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
 {
     uint64_t frame_count;
     AVPacket *pkt = av_packet_alloc();
-    AVRational h264_timebase = {1, 90000};
     int ret;
 
     while (!shutdown_requested)
@@ -78,11 +77,11 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
         case AVERROR(EAGAIN): // output is not available in the current state - user must try to send input
             continue;
         case 0:
-            // TODO: can we set packet's dts and/or pts when we draw an avframe?
-            pkt->pts = pkt->dts = av_rescale_q(frame_count, ctxmgr.get_const_context()->time_base, h264_timebase);
+            // Packet pts and dts will be based on wall clock.
+            pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx.get_stream()->time_base);
             // TODO: add more info to print
-            tlog::info() << "receive_packet_thread: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
-            if ((ret = av_interleaved_write_frame(mctx.get_ctx(), pkt)) < 0)
+            tlog::info() << "receive_packet_thread: Received packet; frame_count=" << frame_count << " pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
+            if ((ret = av_interleaved_write_frame(mctx.get_fctx(), pkt)) < 0)
             {
                 tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
             }

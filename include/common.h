@@ -23,6 +23,7 @@
 extern "C"
 {
 #include <libavcodec/avcodec.h>
+#include <libavutil/time.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
 }
