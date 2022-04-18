@@ -20,7 +20,7 @@ typedef struct
     AVStream *st;
 } MuxingContext;
 
-MuxingContext *muxing_context_init(EncodeContext *ectx, std::string rtsp_mrl);
+MuxingContext *muxing_context_init(const AVCodecContext *ctx, std::string rtsp_mrl);
 int muxing_context_free(MuxingContext *mctx);
 
 #endif // _MUXING_H_

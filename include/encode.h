@@ -8,29 +8,94 @@
 #ifndef _ENCODE_H_
 #define _ENCODE_H_
 
-extern "C"
+#include <common.h>
+
+std::string averror_explain(int err);
+
+class AVCodecContextManager
 {
-#include <libavcodec/avcodec.h>
-#include <libswscale/swscale.h>
-#include <libavutil/imgutils.h>
-}
+private:
+    AVCodecContext *_ctx;
+
+public:
+    AVCodecContextManager(AVCodecID codec_id, AVPixelFormat pix_fmt, std::string x264_encode_preset, std::string x264_encode_tune, int width, int height, int bit_rate, int fps)
+    {
+        int ret;
+        AVCodec *codec;
+        AVDictionary *options = nullptr;
+
+        if (!(codec = avcodec_find_encoder(codec_id)))
+        {
+            throw std::runtime_error{"Failed to find encoder."};
+        }
+
+        if (!(this->_ctx = avcodec_alloc_context3(codec)))
+        {
+            throw std::runtime_error{"Failed to allocate codec context."};
+        }
+
+        this->_ctx->bit_rate = bit_rate;
+        this->_ctx->width = width;
+        this->_ctx->height = height;
+        this->_ctx->time_base = (AVRational){1, fps};
+        this->_ctx->pix_fmt = pix_fmt;
+
+        av_dict_set(&options, "preset", x264_encode_preset.c_str(), 0);
+        av_dict_set(&options, "tune", x264_encode_tune.c_str(), 0);
+
+        ret = avcodec_open2(this->_ctx, (const AVCodec *)codec, &options);
+        av_dict_free(&options);
+
+        if (ret < 0)
+        {
+            throw std::runtime_error{std::string("Failed to open codec: ") + averror_explain(ret)};
+        }
+    }
+
+    AVCodecContext *get_context()
+    {
+        return this->_ctx;
+    }
+
+    ~AVCodecContextManager()
+    {
+        avcodec_close(this->_ctx);
+        av_free(this->_ctx);
+    }
+};
+
+template <class Lockable, class Resource>
+class ResourceLock
+{
+private:
+    Lockable &_lockable;
+    Resource *_resource;
+
+public:
+    ResourceLock(Lockable &l, Resource *r) : _lockable(l), _resource(r)
+    {
+        this->_lockable.lock();
+    }
+    Resource *get()
+    {
+        return this->_resource;
+    }
+    ~ResourceLock()
+    {
+        this->_lockable.unlock();
+    }
+};
 
 typedef struct
 {
     AVCodec *codec;
     AVCodecContext *ctx;
     AVDictionary *options;
-    AVFrame *frame;
-    AVPacket *pkt;
-    struct SwsContext *sws_ctx;
 } EncodeContext;
-
-EncodeContext *encode_context_init(uint32_t width, uint32_t height, AVCodecID codec_id, std::string encode_preset, std::string encode_tune, int bit_rate, int fps);
 
 #include <muxing.h>
 
-void receive_packet_thread(EncodeContext ectx, MuxingContext mctx, bool threads_stop_running);
+void receive_packet_thread(AVCodecContext ctx, MuxingContext mctx, bool threads_stop_running);
 void encode_raw_image_to_frame(EncodeContext *ectx, int width, int height, uint8_t *image_buffer);
-int encode_context_free(EncodeContext *ectx);
 
 #endif // _ENCODE_H_

@@ -106,7 +106,7 @@ int main(int argc, char **argv)
             50,
         };
 
-        ValueFlag<uint32_t> width_flag{
+        ValueFlag<int> width_flag{
             parser,
             "WIDTH",
             "Width of requesting image.",
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
             1280,
         };
 
-        ValueFlag<uint32_t> height_flag{
+        ValueFlag<int> height_flag{
             parser,
             "HEIGHT",
             "Height of requesting image.",
@@ -122,7 +122,7 @@ int main(int argc, char **argv)
             720,
         };
 
-        ValueFlag<uint32_t> bitrate_flag{
+        ValueFlag<int> bitrate_flag{
             parser,
             "BITRATE",
             "Bitrate of output stream.",
@@ -130,7 +130,7 @@ int main(int argc, char **argv)
             400000,
         };
 
-        ValueFlag<uint32_t> fps_flag{
+        ValueFlag<int> fps_flag{
             parser,
             "FPS",
             "Frame per second of output stream. This does not guarantee that n frames will be present.",
@@ -201,13 +201,14 @@ int main(int argc, char **argv)
          *       However, the below values should only matter with this program's output resolution.
          *       Views rendered from ngp should vary in size, optimized for speed.
          */
-        uint32_t width = get(width_flag);
-        uint32_t height = get(height_flag);
         uint8_t *imagebuf = (uint8_t *)malloc(get(cache_size_flag) * 1000 * 1000);
 
         uint64_t frame_count = 0;
 
         tlog::info() << "Initalizing encoder...";
+        AVCodecContextManager ctxw{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
+
+        /*
         EncodeContext *ectx = encode_context_init(width, height, AV_CODEC_ID_H264, get(encode_preset_flag), get(encode_tune_flag), get(bitrate_flag), get(fps_flag));
 
         if (!ectx)
@@ -216,6 +217,7 @@ int main(int argc, char **argv)
             // TODO: Handle error.
             return 0;
         }
+        */
 
         tlog::info() << "Initializing text renderer...";
         EncodeTextContext *etctx = encode_textctx_init(get(font_flag));
@@ -228,7 +230,7 @@ int main(int argc, char **argv)
         }
 
         tlog::info() << "Initalizing muxing context...";
-        MuxingContext *mctx = muxing_context_init(ectx, get(rtsp_server_flag));
+        MuxingContext *mctx = muxing_context_init(ctxw.get_context(), get(rtsp_server_flag));
 
         if (!mctx)
         {
@@ -253,7 +255,7 @@ int main(int argc, char **argv)
         std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
         _socket_main_thread.detach();
 
-        std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ectx), std::ref(*mctx), std::ref(threads_stop_running));
+        std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ctxw.get_context()), std::ref(*mctx), std::ref(threads_stop_running));
         // TODO: Don't detach thread, instead join.
         // If we detach the thread, we don't know whether it is still healthy.
         _receive_packet_thread.detach();
@@ -269,24 +271,24 @@ int main(int argc, char **argv)
 
             RenderedFrame r = queue.pop();
             // Render a string on top of the received view.
-            encode_textctx_render_string_to_image(etctx, r.buffer(), width, height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
+            encode_textctx_render_string_to_image(etctx, r.buffer(), get(width_flag), get(height_flag), RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
 
             // encode_raw_image_to_frame(ectx, width, height, imagebuf);
 
-            r.convert_frame(ectx->ctx, frm);
+            r.convert_frame(ctxw.get_context(), frm);
 
             // The image is ready to be sent to the encoder at this point.
 
             // encode frame
             // TODO: send frame and receive packet in seperate thread.
-            ret = avcodec_send_frame(ectx->ctx, frm);
+            ret = avcodec_send_frame(ctxw.get_context(), frm);
             progress.update(1);
             tlog::success() << "Render and encode loop " << frame_count << " done after " << tlog::durationToString(progress.duration());
             frame_count++;
         }
 
         tlog::info() << "Shutting down";
-        encode_context_free(ectx);
+        // encode_context_free(ectx);
         free(imagebuf);
         encode_textctx_free(etctx);
         muxing_context_free(mctx);

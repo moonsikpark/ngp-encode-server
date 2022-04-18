@@ -17,11 +17,14 @@
 #include <thread>
 #include <chrono>
 
-#include <encode.h>
-#include <encode_text.h>
-#include <muxing.h>
-
 #include <tinylogger/tinylogger.h>
+
+extern "C"
+{
+#include <libavcodec/avcodec.h>
+#include <libswscale/swscale.h>
+#include <libavutil/imgutils.h>
+}
 
 typedef struct
 {
@@ -172,5 +175,8 @@ public:
 };
 
 #include <server.h>
+#include <encode.h>
+#include <encode_text.h>
+#include <muxing.h>
 
 #endif // _COMMON_H_
