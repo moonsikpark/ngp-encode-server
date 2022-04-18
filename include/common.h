@@ -174,6 +174,29 @@ public:
     }
 };
 
+// TODO: implement a conditional_variable like feature.
+template <class Lockable, class Resource>
+class ResourceLock
+{
+private:
+    Lockable &_lockable;
+    Resource *_resource;
+
+public:
+    ResourceLock(Lockable &l, Resource *r) : _lockable(l), _resource(r)
+    {
+        this->_lockable.lock();
+    }
+    Resource *get()
+    {
+        return this->_resource;
+    }
+    ~ResourceLock()
+    {
+        this->_lockable.unlock();
+    }
+};
+
 #include <server.h>
 #include <encode.h>
 #include <encode_text.h>

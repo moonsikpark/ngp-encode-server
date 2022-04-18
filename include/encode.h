@@ -16,6 +16,7 @@ class AVCodecContextManager
 {
 private:
     AVCodecContext *_ctx;
+    std::mutex _mutex;
 
 public:
     AVCodecContextManager(AVCodecID codec_id, AVPixelFormat pix_fmt, std::string x264_encode_preset, std::string x264_encode_tune, int width, int height, int bit_rate, int fps)
@@ -52,6 +53,11 @@ public:
         }
     }
 
+    std::mutex &get_mutex()
+    {
+        return this->_mutex;
+    }
+
     AVCodecContext *get_context()
     {
         return this->_ctx;
@@ -64,28 +70,6 @@ public:
             avcodec_close(this->_ctx);
             av_free(this->_ctx);
         }
-    }
-};
-
-template <class Lockable, class Resource>
-class ResourceLock
-{
-private:
-    Lockable &_lockable;
-    Resource *_resource;
-
-public:
-    ResourceLock(Lockable &l, Resource *r) : _lockable(l), _resource(r)
-    {
-        this->_lockable.lock();
-    }
-    Resource *get()
-    {
-        return this->_resource;
-    }
-    ~ResourceLock()
-    {
-        this->_lockable.unlock();
     }
 };
 
