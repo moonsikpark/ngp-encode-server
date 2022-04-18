@@ -12,6 +12,107 @@
 
 std::string averror_explain(int err);
 
+class RenderedFrame
+{
+    uint64_t _index;
+    uint32_t _width;
+    uint32_t _height;
+    std::unique_ptr<uint8_t> _buf;
+    AVPixelFormat _pix_fmt;
+    struct SwsContext *_sws_ctx;
+    bool _processed;
+
+public:
+    RenderedFrame(uint64_t index, uint32_t width, uint32_t height, AVPixelFormat pix_fmt)
+    {
+        this->_index = index;
+        this->_width = width;
+        this->_height = height;
+        this->_buf = std::unique_ptr<uint8_t>(new uint8_t[width * height * 4]);
+        this->_pix_fmt = pix_fmt;
+        this->_processed = false;
+    }
+    RenderedFrame() = default;
+    RenderedFrame(RenderedFrame &&r) = default;
+
+    void convert_frame(const AVCodecContext *ctx, AVFrame *frame)
+    {
+        if (this->_processed)
+        {
+            throw std::runtime_error{"Tried to convert a converted RenderedFrame."};
+        }
+
+        // Set context of AVFrame
+        frame->format = ctx->pix_fmt;
+        frame->width = ctx->width;
+        frame->height = ctx->height;
+
+        // TODO: specify flags
+        this->_sws_ctx = sws_getContext(
+            this->_width,
+            this->_height,
+            this->_pix_fmt,
+            ctx->width,
+            ctx->height,
+            ctx->pix_fmt,
+            0,
+            0,
+            0,
+            0);
+
+        if (!this->_sws_ctx)
+        {
+            throw std::runtime_error{"Failed to allocate sws_context."};
+        }
+
+        if (av_image_alloc(frame->data, frame->linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
+        {
+            tlog::error("Failed to allocate frame data.");
+        }
+
+        uint8_t *in_data[1] = {(uint8_t *)this->_buf.get()};
+        int in_linesize[1] = {4 * (int)this->_width};
+
+        sws_scale(this->_sws_ctx,
+                  in_data,
+                  in_linesize,
+                  0,
+                  this->_height,
+                  frame->data,
+                  frame->linesize);
+
+        this->_processed = true;
+    }
+
+    const uint64_t &index() const
+    {
+        return this->_index;
+    }
+
+    uint8_t *buffer() const
+    {
+        return this->_buf.get();
+    }
+
+    const uint32_t width() const
+    {
+        return this->_width;
+    }
+
+    const uint32_t height() const
+    {
+        return this->_height;
+    }
+
+    ~RenderedFrame()
+    {
+        if (this->_processed)
+        {
+            sws_freeContext(this->_sws_ctx);
+        }
+    }
+};
+
 class AVCodecContextManager
 {
 private:
