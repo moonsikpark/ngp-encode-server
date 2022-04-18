@@ -208,17 +208,6 @@ int main(int argc, char **argv)
         tlog::info() << "Initalizing encoder...";
         AVCodecContextManager ctxw{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
 
-        /*
-        EncodeContext *ectx = encode_context_init(width, height, AV_CODEC_ID_H264, get(encode_preset_flag), get(encode_tune_flag), get(bitrate_flag), get(fps_flag));
-
-        if (!ectx)
-        {
-            tlog::error() << "Failed to initalize encoder.";
-            // TODO: Handle error.
-            return 0;
-        }
-        */
-
         tlog::info() << "Initializing text renderer...";
         EncodeTextContext *etctx = encode_textctx_init(get(font_flag));
 
