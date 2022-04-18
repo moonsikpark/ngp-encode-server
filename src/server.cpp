@@ -49,10 +49,9 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
     {
         if ((clientfd = accept4(sockfd, NULL, NULL, SOCK_NONBLOCK)) < 0)
         {
-            tlog::success() << "socket_main_thread: waiting for client...";
             if (errno == EAGAIN || errno == EINTR || errno == ECONNABORTED)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds{100});
+                std::this_thread::sleep_for(std::chrono::milliseconds{1000});
                 continue;
             }
             else
