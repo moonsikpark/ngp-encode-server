@@ -262,8 +262,6 @@ int main(int argc, char **argv)
             // Render a string on top of the received view.
             encode_textctx_render_string_to_image(etctx, r.buffer(), get(width_flag), get(height_flag), RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
 
-            // encode_raw_image_to_frame(ectx, width, height, imagebuf);
-
             r.convert_frame(ctxw.get_context(), frm);
 
             // The image is ready to be sent to the encoder at this point.

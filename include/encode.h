@@ -73,16 +73,8 @@ public:
     }
 };
 
-typedef struct
-{
-    AVCodec *codec;
-    AVCodecContext *ctx;
-    AVDictionary *options;
-} EncodeContext;
-
 #include <muxing.h>
 
 void receive_packet_thread(AVCodecContext ctx, MuxingContext mctx, bool threads_stop_running);
-void encode_raw_image_to_frame(EncodeContext *ectx, int width, int height, uint8_t *image_buffer);
 
 #endif // _ENCODE_H_
