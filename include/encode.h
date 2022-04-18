@@ -58,6 +58,11 @@ public:
         return this->_mutex;
     }
 
+    const AVCodecContext *get_const_context() const
+    {
+        return this->_ctx;
+    }
+
     AVCodecContext *get_context()
     {
         return this->_ctx;

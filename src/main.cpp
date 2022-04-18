@@ -168,10 +168,6 @@ int main(int argc, char **argv)
         }
 
         // FIXME: Should we support variable resolution?
-        // TODO: Gracefully handle error.
-        // TODO: Threadify encode loop.
-        // TODO: Threadify socket server.
-
         /*
          * TODO: Currently, we get rendered views from ngp with this width and height value.
          *       However, the below values should only matter with this program's output resolution.

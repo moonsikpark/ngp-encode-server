@@ -29,10 +29,9 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<Rendere
         try
         {
             RenderedFrame r = queue.pop();
-            encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_context()->width, ctxmgr.get_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
+            encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_const_context()->width, ctxmgr.get_const_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
 
-            r.convert_frame(ctxmgr.get_context(), frm);
-
+            r.convert_frame(ctxmgr.get_const_context(), frm);
             {
                 ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
                 AVCodecContext *ctx = lock.get();
@@ -59,7 +58,6 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
     uint64_t frame_count;
     AVPacket *pkt = av_packet_alloc();
     AVRational h264_timebase = {1, 90000};
-    AVRational ctx_timebase;
     int ret;
 
     while (!shutdown_requested)
@@ -69,10 +67,6 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
             ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
             AVCodecContext *ctx = lock.get();
             ret = avcodec_receive_packet(ctx, pkt);
-            if (ret == 0)
-            {
-                ctx_timebase = ctx->time_base;
-            }
         }
         catch (const lock_timeout &)
         {
@@ -85,7 +79,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
             continue;
         case 0:
             // TODO: can we set packet's dts and/or pts when we draw an avframe?
-            pkt->pts = pkt->dts = av_rescale_q(frame_count, ctx_timebase, h264_timebase);
+            pkt->pts = pkt->dts = av_rescale_q(frame_count, ctxmgr.get_const_context()->time_base, h264_timebase);
             // TODO: add more info to print
             tlog::info() << "receive_packet_thread: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
             if ((ret = av_interleaved_write_frame(mctx.oc, pkt)) < 0)
