@@ -67,6 +67,7 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
             tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
         }
     }
+    close(socketfd);
     tlog::success() << "socket_main_thread: Exiting thread.";
 }
 
@@ -102,12 +103,10 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
 
         tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue.";
     }
+    close(clientfd);
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Exiting thread.";
 }
 
-// TODO: Gracefully close the socket.
-//    close(sctx->client);
-//    close(sctx->sockfd);
 int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
 {
     ssize_t ret;
