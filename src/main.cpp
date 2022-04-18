@@ -201,9 +201,6 @@ int main(int argc, char **argv)
          *       However, the below values should only matter with this program's output resolution.
          *       Views rendered from ngp should vary in size, optimized for speed.
          */
-        uint8_t *imagebuf = (uint8_t *)malloc(get(cache_size_flag) * 1000 * 1000);
-
-        uint64_t frame_count = 0;
 
         tlog::info() << "Initalizing encoder...";
         AVCodecContextManager ctxmgr{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
@@ -252,41 +249,10 @@ int main(int argc, char **argv)
         // If we detach the thread, we don't know whether it is still healthy.
         _receive_packet_thread.detach();
 
-        AVFrame *frm = av_frame_alloc();
-
-        /*
-        // Start a receive and encode loop.
-        // TODO: Threadify this portion.
-        while (keep_running)
-        {
-            // Measure elapsed time for the loop to run.
-            auto progress = tlog::progress(1);
-
-            RenderedFrame r = queue.pop();
-            // Render a string on top of the received view.
-            encode_textctx_render_string_to_image(etctx, r.buffer(), get(width_flag), get(height_flag), RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
-
-            r.convert_frame(ctxmgr.get_context(), frm);
-
-            {
-                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
-                AVCodecContext *ctx = lock.get();
-
-                ret = avcodec_send_frame(ctx, frm);
-            }
-
-            progress.update(1);
-            tlog::success() << "Render and encode loop " << frame_count << " done after " << tlog::durationToString(progress.duration());
-            frame_count++;
-        }
-        */
-
         tlog::info() << "Shutting down";
         // encode_context_free(ectx);
-        free(imagebuf);
         encode_textctx_free(etctx);
         muxing_context_free(mctx);
-        av_frame_free(&frm);
     }
     catch (const std::exception &e)
     {
