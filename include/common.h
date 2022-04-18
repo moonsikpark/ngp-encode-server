@@ -16,6 +16,7 @@
 #include <condition_variable>
 #include <thread>
 #include <chrono>
+#include <atomic>
 
 #include <tinylogger/tinylogger.h>
 

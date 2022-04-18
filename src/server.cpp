@@ -14,13 +14,12 @@
 #include <fcntl.h>
 
 // TODO: Gracefully close the socket.
-void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running)
+void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
 
     tlog::info() << "socket_main_thread: Initalizing socket server...";
     struct sockaddr_un addr;
     int sockfd, clientfd;
-    bool keep_running = true;
 
     const char *socket_loc = socket_location.c_str();
 
@@ -46,30 +45,26 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
     }
     tlog::success() << "socket_main_thread: Socket server created and listening.";
 
-    while (keep_running)
+    while (!shutdown_requested)
     {
         if ((clientfd = accept(sockfd, NULL, NULL)) < 0)
         {
             throw std::runtime_error{"socket_main_thread: Failed to accept client: " + std::string(std::strerror(errno))};
         }
-        std::thread _socket_client_thread(socket_client_thread, clientfd, std::ref(req_queue), std::ref(frame_queue), std::ref(threads_stop_running));
+        // TODO: maybe not thread per client but thread pool?
+        std::thread _socket_client_thread(socket_client_thread, clientfd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
         _socket_client_thread.detach();
         tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
     }
+    tlog::success() << "socket_main_thread: Exiting thread.";
 }
 
-void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, bool threads_stop_running)
+void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
-    bool keep_running = true;
-
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
-    while (keep_running)
+    while (!shutdown_requested)
     {
         // TODO: measure how much this loop takes.
-        if (threads_stop_running)
-        {
-            break;
-        }
         // TODO: Get request from request queue.
         // Request req = req_queue.pop();
 
@@ -96,6 +91,7 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
 
         tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue.";
     }
+    tlog::info() << "socket_client_thread (fd=" << clientfd << "): Exiting thread.";
 }
 
 // TODO: Gracefully close the socket.

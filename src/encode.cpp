@@ -19,18 +19,13 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext etctx, bool threads_stop_running)
+void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext etctx, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm = av_frame_alloc();
     int ret;
-    bool keep_running = true;
 
-    while (keep_running)
+    while (!shutdown_requested)
     {
-        if (threads_stop_running)
-        {
-            break;
-        }
 
         RenderedFrame r = queue.pop();
         encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_context()->width, ctxmgr.get_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
@@ -48,26 +43,21 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<Rendere
         }
     }
 
+    tlog::info() << "process_frame_thread: Shutdown requested.";
     av_frame_free(&frm);
-    tlog::info() << "process_frame_thread: exiting thread.";
+    tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, bool threads_stop_running)
+void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, std::atomic<bool> &shutdown_requested)
 {
     uint64_t frame_count;
     AVPacket *pkt = av_packet_alloc();
     AVRational h264_timebase = {1, 90000};
     AVRational ctx_timebase;
     int ret;
-    bool keep_running = true;
 
-    while (keep_running)
+    while (!shutdown_requested)
     {
-        if (threads_stop_running)
-        {
-            break;
-        }
-
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         {
             ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
@@ -98,11 +88,12 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, bo
         default:
             tlog::error() << "receive_packet_thread: Failed to receive packet: " << averror_explain(ret);
         case AVERROR_EOF: // the encoder has been fully flushed, and there will be no more output packets
-            keep_running = false;
+            shutdown_requested = true;
             break;
         }
     }
 
+    tlog::info() << "receive_packet_thread: Shutdown requested.";
     av_packet_free(&pkt);
-    tlog::info() << "receive_packet_thread: exiting thread.";
+    tlog::info() << "receive_packet_thread: Exiting thread.";
 }

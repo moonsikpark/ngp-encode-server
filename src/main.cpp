@@ -8,6 +8,7 @@
 #include <csignal>
 #include <thread>
 #include <functional>
+#include <atomic>
 
 #include <common.h>
 #include <server.h>
@@ -38,12 +39,11 @@ extern "C"
 
 using namespace args;
 
-static volatile std::sig_atomic_t keep_running = 1;
+std::atomic<bool> shutdown_requested{false};
 
-void signal_handler(int signum)
+void signal_handler(int)
 {
-    tlog::info() << "Ctrl+C received. Quitting.";
-    keep_running = 0;
+    shutdown_requested = true;
 }
 
 int main(int argc, char **argv)
@@ -238,19 +238,17 @@ int main(int argc, char **argv)
         ThreadSafeQueue<RenderedFrame> queue(1000);
         ThreadSafeQueue<Request> req_frame(1000);
 
-        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
-        _socket_main_thread.detach();
+        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(queue), std::ref(shutdown_requested));
 
-        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(queue), std::ref(*etctx), std::ref(threads_stop_running));
-        _process_frame_thread.detach();
+        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(queue), std::ref(*etctx), std::ref(shutdown_requested));
 
-        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(*mctx), std::ref(threads_stop_running));
-        // TODO: Don't detach thread, instead join.
-        // If we detach the thread, we don't know whether it is still healthy.
-        _receive_packet_thread.detach();
+        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(*mctx), std::ref(shutdown_requested));
+
+        _process_frame_thread.join();
+        _socket_main_thread.join();
+        _receive_packet_thread.join();
 
         tlog::info() << "Shutting down";
-        // encode_context_free(ectx);
         encode_textctx_free(etctx);
         muxing_context_free(mctx);
     }
