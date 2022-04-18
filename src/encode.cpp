@@ -40,6 +40,7 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<Rendere
                 // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
                 ret = avcodec_send_frame(ctx, frm);
             }
+            tlog::info() << "process_frame_thread: Sent frame.";
         }
         catch (const lock_timeout &)
         {
@@ -94,7 +95,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
             shutdown_requested = true;
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     tlog::info() << "receive_packet_thread: Shutdown requested.";
