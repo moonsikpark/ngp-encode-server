@@ -59,8 +59,11 @@ public:
 
     ~AVCodecContextManager()
     {
-        avcodec_close(this->_ctx);
-        av_free(this->_ctx);
+        if (this->_ctx)
+        {
+            avcodec_close(this->_ctx);
+            av_free(this->_ctx);
+        }
     }
 };
 
