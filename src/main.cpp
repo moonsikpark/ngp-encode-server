@@ -73,15 +73,6 @@ int main(int argc, char **argv)
             "stillimage,zerolatency",
         };
 
-        // TODO: evaluate and support variable resolution rendering.
-        ValueFlag<uint32_t> cache_size_flag{
-            parser,
-            "CACHE_SIZE",
-            "Size of cache per image in megabytes. default: 50 MB",
-            {"cache_size"},
-            50,
-        };
-
         ValueFlag<int> width_flag{
             parser,
             "WIDTH",
@@ -112,15 +103,6 @@ int main(int argc, char **argv)
             "Frame per second of output stream. This does not guarantee that n frames will be present.",
             {"fps"},
             15,
-        };
-
-        // TODO: Remove named pipe.
-        ValueFlag<std::string> pipe_location_flag{
-            parser,
-            "PIPE_LOCATION",
-            "Location of named pipe to output video stream.",
-            {"pipe_location"},
-            "/tmp/videofifo",
         };
 
         ValueFlag<std::string> font_flag{
@@ -174,55 +156,31 @@ int main(int argc, char **argv)
          *       Views rendered from ngp should vary in size, optimized for speed.
          */
 
-        tlog::info() << "Initalizing encoder...";
+        tlog::info() << "Initalizing encoder.";
         AVCodecContextManager ctxmgr{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
 
-        tlog::info() << "Initializing text renderer...";
-        EncodeTextContext *etctx = encode_textctx_init(get(font_flag));
+        tlog::info() << "Initializing text renderer.";
+        EncodeTextContext etctx{get(font_flag)};
 
-        if (!etctx)
-        {
-            tlog::error() << "Failed to initalize text renderer.";
-            // TODO: Handle error.
-            return 0;
-        }
+        tlog::info() << "Initalizing muxing context.";
 
-        tlog::info() << "Initalizing muxing context...";
-        MuxingContext *mctx = muxing_context_init(ctxmgr.get_context(), get(rtsp_server_flag));
+        MuxingContext mctx{ctxmgr.get_const_context(), get(rtsp_server_flag)};
 
-        if (!mctx)
-        {
-            tlog::error() << "Failed to initalize muxing context";
-            // TODO: Handle error.
-            return 0;
-        }
+        tlog::info() << "Initalizing queue.";
+        ThreadSafeQueue<RenderedFrame> frame_queue(1000);
+        ThreadSafeQueue<Request> req_frame(1000);
 
         tlog::info() << "Done bootstrapping.";
 
-        int ret;
-
-        // TODO: Start a socket server thread from this point.
-        tlog::info() << "Waiting for client to connect.";
-        // socket_context_wait_for_client_blocking(sctx);
-
-        bool threads_stop_running = false;
-
-        ThreadSafeQueue<RenderedFrame> queue(1000);
-        ThreadSafeQueue<Request> req_frame(1000);
-
-        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(queue), std::ref(shutdown_requested));
-
-        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(queue), std::ref(*etctx), std::ref(shutdown_requested));
-
-        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(*mctx), std::ref(shutdown_requested));
+        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
 
         _process_frame_thread.join();
         _socket_main_thread.join();
         _receive_packet_thread.join();
 
-        tlog::info() << "Shutting down";
-        encode_textctx_free(etctx);
-        muxing_context_free(mctx);
+        tlog::info() << "All threads are terminated. Shutting down.";
     }
     catch (const std::exception &e)
     {

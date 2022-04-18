@@ -19,7 +19,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm = av_frame_alloc();
     int ret;
@@ -29,7 +29,7 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<Rendere
         try
         {
             RenderedFrame r = queue.pop();
-            encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_const_context()->width, ctxmgr.get_const_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
+            etctx.render_string_to_frame(r, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
 
             r.convert_frame(ctxmgr.get_const_context(), frm);
             {
@@ -53,7 +53,7 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<Rendere
     tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, std::atomic<bool> &shutdown_requested)
+void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested)
 {
     uint64_t frame_count;
     AVPacket *pkt = av_packet_alloc();
@@ -82,7 +82,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
             pkt->pts = pkt->dts = av_rescale_q(frame_count, ctxmgr.get_const_context()->time_base, h264_timebase);
             // TODO: add more info to print
             tlog::info() << "receive_packet_thread: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
-            if ((ret = av_interleaved_write_frame(mctx.oc, pkt)) < 0)
+            if ((ret = av_interleaved_write_frame(mctx.get_ctx(), pkt)) < 0)
             {
                 tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
             }

@@ -60,8 +60,6 @@ include_directories("include")
 set(SOURCES
 	src/encode.cpp
 	src/server.cpp
-	src/encode_text.cpp
-	src/muxing.cpp
 	src/main.cpp
 )
 

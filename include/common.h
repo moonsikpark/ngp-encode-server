@@ -125,6 +125,16 @@ public:
         return this->_buf.get();
     }
 
+    const uint32_t width() const
+    {
+        return this->_width;
+    }
+
+    const uint32_t height() const
+    {
+        return this->_height;
+    }
+
     ~RenderedFrame()
     {
         if (this->_processed)
