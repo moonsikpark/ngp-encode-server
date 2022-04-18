@@ -17,6 +17,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <exception>
 
 #include <tinylogger/tinylogger.h>
 
@@ -134,6 +135,14 @@ public:
     }
 };
 
+class lock_timeout : public std::exception
+{
+    virtual const char *what() const throw()
+    {
+        return "Waiting for lock timed out.";
+    }
+};
+
 template <class T>
 class ThreadSafeQueue
 {
@@ -154,28 +163,41 @@ public:
     void push(T &&t)
     {
         unique_lock lock(this->_mutex);
-        this->_producer.wait(lock, [&]
-                             { return this->_queue.size() < this->_max_size; });
-        this->_queue.push(std::move(t));
-        _consumer.notify_one();
+        if (this->_producer.wait_for(lock, std::chrono::milliseconds(300), [&]
+                                     { return this->_queue.size() < this->_max_size; }))
+        {
+            this->_queue.push(std::move(t));
+            _consumer.notify_one();
+        }
+        else
+        {
+            throw lock_timeout{};
+        }
     }
 
     T pop()
     {
         unique_lock lock(this->_mutex);
-        this->_consumer.wait(lock, [&]
-                             { return this->_queue.size() > 0; });
-        T item = std::move(this->_queue.front());
-        if (this->_queue.size() == this->_max_size)
+        if (this->_consumer.wait_for(lock, std::chrono::milliseconds(300), [&]
+                                     { return this->_queue.size() > 0; }))
         {
-            this->_producer.notify_all();
+            T item = std::move(this->_queue.front());
+            if (this->_queue.size() == this->_max_size)
+            {
+                this->_producer.notify_all();
+            }
+            this->_queue.pop();
+            return item;
         }
-        this->_queue.pop();
-        return item;
+        else
+        {
+            throw lock_timeout{};
+        }
     }
 };
 
 // TODO: implement a conditional_variable like feature.
+// TODO: need to have timeout for the lock!
 template <class Lockable, class Resource>
 class ResourceLock
 {

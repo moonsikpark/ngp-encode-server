@@ -26,20 +26,26 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<Rendere
 
     while (!shutdown_requested)
     {
-
-        RenderedFrame r = queue.pop();
-        encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_context()->width, ctxmgr.get_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
-
-        r.convert_frame(ctxmgr.get_context(), frm);
-
+        try
         {
-            ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
-            AVCodecContext *ctx = lock.get();
+            RenderedFrame r = queue.pop();
+            encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_context()->width, ctxmgr.get_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
 
-            // TODO: handle error codes!
-            // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
-            // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
-            ret = avcodec_send_frame(ctx, frm);
+            r.convert_frame(ctxmgr.get_context(), frm);
+
+            {
+                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+                AVCodecContext *ctx = lock.get();
+
+                // TODO: handle error codes!
+                // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
+                // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
+                ret = avcodec_send_frame(ctx, frm);
+            }
+        }
+        catch (const lock_timeout &)
+        {
+            continue;
         }
     }
 
@@ -58,7 +64,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
 
     while (!shutdown_requested)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        try
         {
             ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
             AVCodecContext *ctx = lock.get();
@@ -67,6 +73,10 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
             {
                 ctx_timebase = ctx->time_base;
             }
+        }
+        catch (const lock_timeout &)
+        {
+            continue;
         }
 
         switch (ret)
@@ -91,6 +101,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, st
             shutdown_requested = true;
             break;
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     tlog::info() << "receive_packet_thread: Shutdown requested.";
