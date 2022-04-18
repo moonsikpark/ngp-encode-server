@@ -50,7 +50,7 @@ int main(int argc, char **argv)
 {
     // TODO: Use POSIX standard sigaction(2)
     signal(SIGINT, signal_handler);
-
+    signal(SIGPIPE, SIG_IGN);
     try
     {
         ArgumentParser parser{

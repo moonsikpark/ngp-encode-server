@@ -67,15 +67,21 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
             tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
         }
     }
-    close(socketfd);
+    close(sockfd);
     tlog::success() << "socket_main_thread: Exiting thread.";
 }
 
 void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
+    int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
     while (!shutdown_requested)
     {
+        if (ret < 0)
+        {
+            tlog::info() << "socket_client_thread (fd=" << clientfd << "): Error occured. Exiting.";
+            break;
+        }
         // TODO: measure how much this loop takes.
         // TODO: Get request from request queue.
         // Request req = req_queue.pop();
@@ -91,15 +97,31 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
 
         RequestResponse resp;
 
-        socket_send_blocking(clientfd, (uint8_t *)&req, sizeof(Request));
+        if ((ret = socket_send_blocking(clientfd, (uint8_t *)&req, sizeof(Request))) < 0)
+        {
+            continue;
+        }
 
-        socket_receive_blocking(clientfd, (uint8_t *)&resp, sizeof(RequestResponse));
+        if ((ret = socket_receive_blocking(clientfd, (uint8_t *)&resp, sizeof(RequestResponse))) < 0)
+        {
+            continue;
+        }
 
         RenderedFrame frame{0, req.width, req.height, AV_PIX_FMT_BGR32};
 
-        socket_receive_blocking(clientfd, frame.buffer(), resp.filesize);
+        if ((ret = socket_receive_blocking(clientfd, frame.buffer(), resp.filesize)) < 0)
+        {
+            continue;
+        }
 
-        frame_queue.push(std::move(frame));
+        try
+        {
+            frame_queue.push(std::move(frame));
+        }
+        catch (const lock_timeout &)
+        {
+            continue;
+        }
 
         tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue.";
     }
@@ -114,15 +136,15 @@ int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
 
     while (sent < size)
     {
-        ret = write(clientfd, buf + sent, size - sent);
+        ret = send(clientfd, buf + sent, size - sent, MSG_NOSIGNAL);
         if (ret < 0)
         {
             if (errno == EAGAIN)
             {
                 continue;
             }
-            tlog::error() << "Failed while sending data to socket: " << std::string(std::strerror(errno));
-            return (int)ret;
+            tlog::error() << "socket_send_blocking: " << std::string(std::strerror(errno));
+            return -errno;
         }
         sent += ret;
     }
@@ -144,12 +166,12 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
             {
                 continue;
             }
-            tlog::error() << "Failed while receiving from socket: " << std::string(std::strerror(errno));
-            return (int)ret;
+            tlog::error() << "socket_receive_blocking: " << std::string(std::strerror(errno));
+            return -errno;
         }
         if (ret == 0 && recv < size)
         {
-            tlog::error() << "Received EOF when transfer is not done.";
+            tlog::error() << "socket_receive_blocking: Received EOF when transfer is not done.";
             return -1;
         }
         recv += ret;
