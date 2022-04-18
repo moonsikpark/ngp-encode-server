@@ -129,6 +129,26 @@ public:
     }
 };
 
+class ScopedTimer
+{
+    using clock = std::chrono::steady_clock;
+    using time_format = std::chrono::milliseconds;
+
+private:
+    std::chrono::time_point<clock> _start;
+
+public:
+    ScopedTimer()
+    {
+        this->_start = clock::now();
+    }
+
+    time_format elapsed()
+    {
+        return std::chrono::duration_cast<time_format>(clock::now() - this->_start);
+    }
+};
+
 #include <encode.h>
 #include <server.h>
 #include <encode_text.h>

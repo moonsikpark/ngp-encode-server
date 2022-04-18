@@ -152,52 +152,54 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
         // TODO: measure how much this loop takes.
         // TODO: Get request from request queue.
         // Request req = req_queue.pop();
-
-        Request req = {
-            .width = 1280,
-            .height = 720,
-            .rotx = 1,
-            .roty = 0,
-            .dx = -1,
-            .dy = 0,
-            .dz = 0};
-
-        RequestResponse resp;
-
-        // Send request from request queue.
-        if ((ret = socket_send_blocking(clientfd, (uint8_t *)&req, sizeof(Request))) < 0)
         {
-            continue;
-        }
+            ScopedTimer timer;
+            Request req = {
+                .width = 1280,
+                .height = 720,
+                .rotx = 1,
+                .roty = 0,
+                .dx = -1,
+                .dy = 0,
+                .dz = 0};
 
-        // Receive requestresponse from client.
-        if ((ret = socket_receive_blocking(clientfd, (uint8_t *)&resp, sizeof(RequestResponse))) < 0)
-        {
-            continue;
-        }
+            RequestResponse resp;
 
-        // Create a new renderedframe.
-        RenderedFrame frame{0, req.width, req.height, AV_PIX_FMT_BGR32};
+            // Send request from request queue.
+            if ((ret = socket_send_blocking(clientfd, (uint8_t *)&req, sizeof(Request))) < 0)
+            {
+                continue;
+            }
 
-        // Receive rendered frame to the buffer of renderedframe.
-        if ((ret = socket_receive_blocking(clientfd, frame.buffer(), resp.filesize)) < 0)
-        {
-            continue;
-        }
+            // Receive requestresponse from client.
+            if ((ret = socket_receive_blocking(clientfd, (uint8_t *)&resp, sizeof(RequestResponse))) < 0)
+            {
+                continue;
+            }
 
-        try
-        {
-            // Push the frame to the frame queue.
-            frame_queue.push(std::move(frame));
-        }
-        catch (const lock_timeout &)
-        {
-            // It takes too much time to acquire a lock of frame_queue. Drop the frame.
-            // TODO: don't drop?
-            continue;
-        }
+            // Create a new renderedframe.
+            RenderedFrame frame{0, req.width, req.height, AV_PIX_FMT_BGR32};
 
-        tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue.";
+            // Receive rendered frame to the buffer of renderedframe.
+            if ((ret = socket_receive_blocking(clientfd, frame.buffer(), resp.filesize)) < 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                // Push the frame to the frame queue.
+                frame_queue.push(std::move(frame));
+            }
+            catch (const lock_timeout &)
+            {
+                // It takes too much time to acquire a lock of frame_queue. Drop the frame.
+                // TODO: don't drop?
+                continue;
+            }
+
+            tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue in " << timer.elapsed().count() << " msec.";
+        }
     }
     // Cleanup: close the client socket.
     close(clientfd);
