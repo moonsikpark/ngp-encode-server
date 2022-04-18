@@ -25,7 +25,7 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
 
     unlink(socket_loc);
 
-    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0)
     {
         throw std::runtime_error{"socket_main_thread: Failed to create socket: " + std::string(std::strerror(errno))};
     }
@@ -47,14 +47,26 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
 
     while (!shutdown_requested)
     {
-        if ((clientfd = accept(sockfd, NULL, NULL)) < 0)
+        if ((clientfd = accept4(sockfd, NULL, NULL, SOCK_NONBLOCK)) < 0)
         {
-            throw std::runtime_error{"socket_main_thread: Failed to accept client: " + std::string(std::strerror(errno))};
+            tlog::success() << "socket_main_thread: waiting for client...";
+            if (errno == EAGAIN || errno == EINTR || errno == ECONNABORTED)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds{100});
+                continue;
+            }
+            else
+            {
+                throw std::runtime_error{"socket_main_thread: Failed to accept client: " + std::string(std::strerror(errno))};
+            }
         }
-        // TODO: maybe not thread per client but thread pool?
-        std::thread _socket_client_thread(socket_client_thread, clientfd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
-        _socket_client_thread.detach();
-        tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
+        else
+        {
+            // TODO: maybe not thread per client but thread pool?
+            std::thread _socket_client_thread(socket_client_thread, clientfd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+            _socket_client_thread.detach();
+            tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
+        }
     }
     tlog::success() << "socket_main_thread: Exiting thread.";
 }
@@ -107,6 +119,10 @@ int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
         ret = write(clientfd, buf + sent, size - sent);
         if (ret < 0)
         {
+            if (errno == EAGAIN)
+            {
+                continue;
+            }
             tlog::error() << "Failed while sending data to socket: " << std::string(std::strerror(errno));
             return (int)ret;
         }
@@ -126,6 +142,10 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
         ret = read(clientfd, buf + recv, size - recv);
         if (ret < 0)
         {
+            if (errno == EAGAIN)
+            {
+                continue;
+            }
             tlog::error() << "Failed while receiving from socket: " << std::string(std::strerror(errno));
             return (int)ret;
         }
