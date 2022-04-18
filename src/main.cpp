@@ -7,35 +7,11 @@
 
 #include <csignal>
 #include <thread>
-#include <functional>
 #include <atomic>
 
 #include <common.h>
-#include <server.h>
 
 #include <args/args.hxx>
-
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/un.h>
-#include <stdlib.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-
-extern "C"
-{
-#include <libavcodec/avcodec.h>
-#include <libswscale/swscale.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/opt.h>
-#include <libavutil/time.h>
-#include <libavfilter/avfilter.h>
-#include <libavformat/avformat.h>
-}
 
 using namespace args;
 

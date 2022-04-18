@@ -14,7 +14,6 @@
 #include <mutex>
 #include <queue>
 #include <condition_variable>
-#include <thread>
 #include <chrono>
 #include <atomic>
 #include <exception>
