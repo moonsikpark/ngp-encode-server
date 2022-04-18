@@ -102,7 +102,7 @@ int main(int argc, char **argv)
             "FPS",
             "Frame per second of output stream. This does not guarantee that n frames will be present.",
             {"fps"},
-            15,
+            7,
         };
 
         ValueFlag<std::string> font_flag{
@@ -167,8 +167,8 @@ int main(int argc, char **argv)
         MuxingContext mctx{ctxmgr.get_const_context(), get(rtsp_server_flag)};
 
         tlog::info() << "Initalizing queue.";
-        ThreadSafeQueue<RenderedFrame> frame_queue(1000);
-        ThreadSafeQueue<Request> req_frame(1000);
+        ThreadSafeQueue<RenderedFrame> frame_queue(100);
+        ThreadSafeQueue<Request> req_frame(100);
 
         tlog::info() << "Done bootstrapping.";
 
