@@ -19,11 +19,45 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void receive_packet_thread(AVCodecContext ctx, MuxingContext mctx, bool threads_stop_running)
+void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext etctx, bool threads_stop_running)
+{
+    AVFrame *frm = av_frame_alloc();
+    int ret;
+    bool keep_running = true;
+
+    while (keep_running)
+    {
+        if (threads_stop_running)
+        {
+            break;
+        }
+
+        RenderedFrame r = queue.pop();
+        encode_textctx_render_string_to_image(&etctx, r.buffer(), ctxmgr.get_context()->width, ctxmgr.get_context()->height, RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(0));
+
+        r.convert_frame(ctxmgr.get_context(), frm);
+
+        {
+            ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+            AVCodecContext *ctx = lock.get();
+
+            // TODO: handle error codes!
+            // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
+            // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
+            ret = avcodec_send_frame(ctx, frm);
+        }
+    }
+
+    av_frame_free(&frm);
+    tlog::info() << "process_frame_thread: exiting thread.";
+}
+
+void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, bool threads_stop_running)
 {
     uint64_t frame_count;
     AVPacket *pkt = av_packet_alloc();
     AVRational h264_timebase = {1, 90000};
+    AVRational ctx_timebase;
     int ret;
     bool keep_running = true;
 
@@ -35,9 +69,15 @@ void receive_packet_thread(AVCodecContext ctx, MuxingContext mctx, bool threads_
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        // XXX: Each and every access to AVCodecContext should be protected.
-        // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
-        ret = avcodec_receive_packet(&ctx, pkt);
+        {
+            ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+            AVCodecContext *ctx = lock.get();
+            ret = avcodec_receive_packet(ctx, pkt);
+            if (ret == 0)
+            {
+                ctx_timebase = ctx->time_base;
+            }
+        }
 
         switch (ret)
         {
@@ -45,7 +85,7 @@ void receive_packet_thread(AVCodecContext ctx, MuxingContext mctx, bool threads_
             continue;
         case 0:
             // TODO: can we set packet's dts and/or pts when we draw an avframe?
-            pkt->pts = pkt->dts = av_rescale_q(frame_count, ctx.time_base, h264_timebase);
+            pkt->pts = pkt->dts = av_rescale_q(frame_count, ctx_timebase, h264_timebase);
             // TODO: add more info to print
             tlog::info() << "receive_packet_thread: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
             if ((ret = av_interleaved_write_frame(mctx.oc, pkt)) < 0)

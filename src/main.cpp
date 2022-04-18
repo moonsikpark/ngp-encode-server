@@ -206,7 +206,7 @@ int main(int argc, char **argv)
         uint64_t frame_count = 0;
 
         tlog::info() << "Initalizing encoder...";
-        AVCodecContextManager ctxw{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
+        AVCodecContextManager ctxmgr{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
 
         tlog::info() << "Initializing text renderer...";
         EncodeTextContext *etctx = encode_textctx_init(get(font_flag));
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
         }
 
         tlog::info() << "Initalizing muxing context...";
-        MuxingContext *mctx = muxing_context_init(ctxw.get_context(), get(rtsp_server_flag));
+        MuxingContext *mctx = muxing_context_init(ctxmgr.get_context(), get(rtsp_server_flag));
 
         if (!mctx)
         {
@@ -244,13 +244,17 @@ int main(int argc, char **argv)
         std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(queue), std::ref(threads_stop_running));
         _socket_main_thread.detach();
 
-        std::thread _receive_packet_thread(receive_packet_thread, std::ref(*ctxw.get_context()), std::ref(*mctx), std::ref(threads_stop_running));
+        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(queue), std::ref(*etctx), std::ref(threads_stop_running));
+        _process_frame_thread.detach();
+
+        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(*mctx), std::ref(threads_stop_running));
         // TODO: Don't detach thread, instead join.
         // If we detach the thread, we don't know whether it is still healthy.
         _receive_packet_thread.detach();
 
         AVFrame *frm = av_frame_alloc();
 
+        /*
         // Start a receive and encode loop.
         // TODO: Threadify this portion.
         while (keep_running)
@@ -262,17 +266,20 @@ int main(int argc, char **argv)
             // Render a string on top of the received view.
             encode_textctx_render_string_to_image(etctx, r.buffer(), get(width_flag), get(height_flag), RenderPositionOption_LEFT_BOTTOM, std::string("framecount=") + std::to_string(frame_count));
 
-            r.convert_frame(ctxw.get_context(), frm);
+            r.convert_frame(ctxmgr.get_context(), frm);
 
-            // The image is ready to be sent to the encoder at this point.
+            {
+                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+                AVCodecContext *ctx = lock.get();
 
-            // encode frame
-            // TODO: send frame and receive packet in seperate thread.
-            ret = avcodec_send_frame(ctxw.get_context(), frm);
+                ret = avcodec_send_frame(ctx, frm);
+            }
+
             progress.update(1);
             tlog::success() << "Render and encode loop " << frame_count << " done after " << tlog::durationToString(progress.duration());
             frame_count++;
         }
+        */
 
         tlog::info() << "Shutting down";
         // encode_context_free(ectx);

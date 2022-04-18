@@ -74,7 +74,8 @@ public:
 };
 
 #include <muxing.h>
-
-void receive_packet_thread(AVCodecContext ctx, MuxingContext mctx, bool threads_stop_running);
+#include <encode_text.h>
+void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext etctx, bool threads_stop_running);
+void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext mctx, bool threads_stop_running);
 
 #endif // _ENCODE_H_
