@@ -17,6 +17,7 @@
 #include <chrono>
 #include <atomic>
 #include <exception>
+#include <map>
 
 #include <tinylogger/tinylogger.h>
 
@@ -92,6 +93,54 @@ public:
             this->_queue.pop();
             this->_pusher.notify_one();
             return item;
+        }
+        else
+        {
+            throw lock_timeout{};
+        }
+    }
+};
+
+template <class T>
+class ThreadSafeMap
+{
+private:
+    std::map<uint64_t, std::unique_ptr<T>> _map;
+    uint64_t _max_size;
+    std::condition_variable _inserter, _getter;
+    std::mutex _mutex;
+
+    using unique_lock = std::unique_lock<std::mutex>;
+
+public:
+    ThreadSafeMap(uint64_t max_size) : _max_size(max_size) {}
+
+    template <class U>
+    void insert(uint64_t index, U &&item)
+    {
+        unique_lock lock(this->_mutex);
+        if (this->_inserter.wait_for(lock, std::chrono::milliseconds(300), [&]
+                                     { return this->_map.size() < this->_max_size; }))
+        {
+            this->_map.insert({index, std::forward<U>(item)});
+            this->_getter.notify_all();
+        }
+        else
+        {
+            throw lock_timeout{};
+        }
+    }
+
+    std::unique_ptr<T> pop_el(uint64_t index)
+    {
+        unique_lock lock(this->_mutex);
+        if (this->_getter.wait_for(lock, std::chrono::milliseconds(300), [&]
+                                   { return this->_map.contains(index); }))
+        {
+            std::unique_ptr<T> it = std::move(this->_map.at(index));
+            this->_map.erase(index);
+            this->_inserter.notify_one();
+            return it;
         }
         else
         {

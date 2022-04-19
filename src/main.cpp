@@ -169,16 +169,19 @@ int main(int argc, char **argv)
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<RenderedFrame> frame_queue(100);
         ThreadSafeQueue<Request> req_frame(100);
+        ThreadSafeMap<RenderedFrame> encode_queue(100);
 
         tlog::info() << "Done bootstrapping.";
 
         std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
-        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
+        std::thread _send_frame_thread(send_frame_thread, std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
 
         _process_frame_thread.join();
         _socket_main_thread.join();
         _receive_packet_thread.join();
+        _send_frame_thread.join();
 
         tlog::info() << "All threads are terminated. Shutting down.";
     }

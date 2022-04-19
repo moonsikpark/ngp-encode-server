@@ -141,6 +141,7 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
 {
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
+    uint64_t frame_count = 0; // XXX HACK
     while (!shutdown_requested)
     {
         if (ret < 0)
@@ -180,7 +181,7 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
             // Create a new renderedframe.
             // TODO: Honor index.
             // TODO: change w/h to unsigned int.
-            std::unique_ptr<RenderedFrame> frame = std::make_unique<RenderedFrame>(0, (unsigned int)req.width, (unsigned int)req.height, AV_PIX_FMT_BGR32);
+            std::unique_ptr<RenderedFrame> frame = std::make_unique<RenderedFrame>(frame_count, (unsigned int)req.width, (unsigned int)req.height, AV_PIX_FMT_BGR32);
 
             // Receive rendered frame to the buffer of renderedframe.
             if ((ret = socket_receive_blocking(clientfd, frame->buffer(), resp.filesize)) < 0)
@@ -199,7 +200,7 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
                 // TODO: don't drop?
                 continue;
             }
-
+            frame_count++;
             tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue in " << timer.elapsed().count() << " msec.";
         }
     }

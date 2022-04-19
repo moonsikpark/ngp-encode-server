@@ -10,6 +10,11 @@
 
 #include <common.h>
 
+extern "C"
+{
+#include <libavutil/pixdesc.h>
+}
+
 std::string averror_explain(int err);
 
 class RenderedFrame
@@ -18,6 +23,9 @@ class RenderedFrame
     uint32_t _width;
     uint32_t _height;
     std::unique_ptr<uint8_t> _buf;
+    uint8_t *_processed_data[AV_NUM_DATA_POINTERS];
+    int _processed_linesize[AV_NUM_DATA_POINTERS];
+
     AVPixelFormat _pix_fmt;
     struct SwsContext *_sws_ctx;
     bool _processed;
@@ -41,17 +49,24 @@ public:
     RenderedFrame(const RenderedFrame &) = delete;
     RenderedFrame &operator=(const RenderedFrame &) = delete;
 
-    void convert_frame(const AVCodecContext *ctx, AVFrame *frame)
+    friend bool operator<(const RenderedFrame &lhs, const RenderedFrame &rhs)
+    {
+        // Compare frames by their index.
+        return lhs._index < rhs._index;
+    }
+
+    friend bool operator==(const RenderedFrame &, const RenderedFrame &)
+    {
+        // No frames are the same.
+        return false;
+    }
+
+    void convert_frame(const AVCodecContext *ctx)
     {
         if (this->_processed)
         {
             throw std::runtime_error{"Tried to convert a converted RenderedFrame."};
         }
-
-        // Set context of AVFrame
-        frame->format = ctx->pix_fmt;
-        frame->width = ctx->width;
-        frame->height = ctx->height;
 
         // TODO: specify flags
         this->_sws_ctx = sws_getContext(
@@ -71,21 +86,26 @@ public:
             throw std::runtime_error{"Failed to allocate sws_context."};
         }
 
-        if (av_image_alloc(frame->data, frame->linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
+        if (av_image_alloc(this->_processed_data, this->_processed_linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
         {
             tlog::error("Failed to allocate frame data.");
         }
 
+        const AVPixFmtDescriptor *in_pixfmt = av_pix_fmt_desc_get(this->_pix_fmt);
+        int in_ls[AV_NUM_DATA_POINTERS] = {0};
+        for (int plane = 0; plane < in_pixfmt->nb_components; plane++)
+        {
+            in_ls[plane] = av_image_get_linesize(this->_pix_fmt, this->_width, plane);
+        }
         uint8_t *in_data[1] = {(uint8_t *)this->_buf.get()};
-        int in_linesize[1] = {4 * (int)this->_width};
 
         sws_scale(this->_sws_ctx,
                   in_data,
-                  in_linesize,
+                  in_ls,
                   0,
                   this->_height,
-                  frame->data,
-                  frame->linesize);
+                  this->_processed_data,
+                  this->_processed_linesize);
 
         this->_processed = true;
     }
@@ -110,10 +130,30 @@ public:
         return this->_height;
     }
 
+    uint8_t *processed_data()
+    {
+        if (!this->_processed)
+        {
+            throw std::runtime_error{"Tried to access processed_data from not processed RenderedFrame."};
+        }
+
+        return this->_processed_data[0];
+    }
+
+    const int *processed_linesize() const
+    {
+        if (!this->_processed)
+        {
+            throw std::runtime_error{"Tried to access processed_linesize from not processed RenderedFrame."};
+        }
+        return this->_processed_linesize;
+    }
+
     ~RenderedFrame()
     {
         if (this->_processed)
         {
+            av_freep(&this->_processed_data[0]);
             sws_freeContext(this->_sws_ctx);
         }
     }
@@ -187,7 +227,8 @@ public:
 
 #include <muxing.h>
 #include <encode_text.h>
-void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested);
+void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<RenderedFrame> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested);
+void send_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested);
 void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested);
 
 #endif // _ENCODE_H_
