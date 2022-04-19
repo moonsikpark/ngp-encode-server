@@ -23,15 +23,17 @@ class RenderedFrame
     bool _processed;
 
 public:
-    RenderedFrame(uint64_t index, uint32_t width, uint32_t height, AVPixelFormat pix_fmt)
-    {
-        this->_index = index;
-        this->_width = width;
-        this->_height = height;
-        this->_buf = std::unique_ptr<uint8_t>(new uint8_t[width * height * 4]);
-        this->_pix_fmt = pix_fmt;
-        this->_processed = false;
-    }
+    RenderedFrame(uint64_t index,
+                  uint32_t width,
+                  uint32_t height,
+                  AVPixelFormat pix_fmt) : _index(index),
+                                           _width(width),
+                                           _height(height),
+                                           _buf(
+                                               std::unique_ptr<uint8_t>(
+                                                   new uint8_t[width * height * 4])),
+                                           _pix_fmt(pix_fmt),
+                                           _processed(false) {}
     // Forbid copying or moving of RenderedFrame.
     // The frame should be wrapped in unique_ptr to be moved.
     RenderedFrame(RenderedFrame &&r) = delete;

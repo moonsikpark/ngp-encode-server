@@ -64,10 +64,8 @@ private:
     using unique_lock = std::unique_lock<std::mutex>;
 
 public:
-    ThreadSafeQueue(unsigned int max_size)
-    {
-        this->_max_size = max_size;
-    }
+    ThreadSafeQueue(unsigned int max_size) : _max_size(max_size) {}
+
     template <class U>
     void push(U &&item)
     {
@@ -135,10 +133,7 @@ private:
     std::chrono::time_point<clock> _start;
 
 public:
-    ScopedTimer()
-    {
-        this->_start = clock::now();
-    }
+    ScopedTimer() : _start(clock::now()) {}
 
     time_format elapsed()
     {
