@@ -10,4 +10,9 @@
 
 #include <common.h>
 
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+
+void pov_websocket_thread();
+
 #endif // _POV_H_

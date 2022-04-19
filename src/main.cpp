@@ -177,7 +177,8 @@ int main(int argc, char **argv)
         std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
         std::thread _send_frame_thread(send_frame_thread, std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
-
+        std::thread _pov_websocket_thread(pov_websocket_thread);
+        _pov_websocket_thread.detach();
         _process_frame_thread.join();
         _socket_main_thread.join();
         _receive_packet_thread.join();
