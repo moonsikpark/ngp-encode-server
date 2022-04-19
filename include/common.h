@@ -57,7 +57,7 @@ class ThreadSafeQueue
 {
 private:
     unsigned int _max_size;
-    std::queue<T> _queue;
+    std::queue<std::unique_ptr<T>> _queue;
     std::condition_variable _consumer, _producer;
     std::mutex _mutex;
 
@@ -68,14 +68,14 @@ public:
     {
         this->_max_size = max_size;
     }
-
-    void push(T &&t)
+    template <class U>
+    void push(U &&item)
     {
         unique_lock lock(this->_mutex);
         if (this->_producer.wait_for(lock, std::chrono::milliseconds(300), [&]
                                      { return this->_queue.size() < this->_max_size; }))
         {
-            this->_queue.push(std::move(t));
+            this->_queue.push(std::forward<U>(item));
             _consumer.notify_one();
         }
         else
@@ -84,13 +84,13 @@ public:
         }
     }
 
-    T pop()
+    std::unique_ptr<T> pop()
     {
         unique_lock lock(this->_mutex);
         if (this->_consumer.wait_for(lock, std::chrono::milliseconds(300), [&]
                                      { return this->_queue.size() > 0; }))
         {
-            T item = std::move(this->_queue.front());
+            std::unique_ptr<T> item = std::move(this->_queue.front());
             if (this->_queue.size() == this->_max_size)
             {
                 this->_producer.notify_all();

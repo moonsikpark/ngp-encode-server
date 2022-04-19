@@ -178,10 +178,12 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
             }
 
             // Create a new renderedframe.
-            RenderedFrame frame{0, req.width, req.height, AV_PIX_FMT_BGR32};
+            // TODO: Honor index.
+            // TODO: change w/h to unsigned int.
+            std::unique_ptr<RenderedFrame> frame = std::make_unique<RenderedFrame>(0, (unsigned int)req.width, (unsigned int)req.height, AV_PIX_FMT_BGR32);
 
             // Receive rendered frame to the buffer of renderedframe.
-            if ((ret = socket_receive_blocking(clientfd, frame.buffer(), resp.filesize)) < 0)
+            if ((ret = socket_receive_blocking(clientfd, frame->buffer(), resp.filesize)) < 0)
             {
                 continue;
             }

@@ -54,13 +54,13 @@ public:
             throw std::runtime_error{std::string("EncodeTextContext: Failed to set character size: ") + std::string(FT_Error_String(ret))};
         }
     }
-    void render_string_to_frame(RenderedFrame &frame, EncodeTextContext::RenderPositionOption opt, std::string content)
+    void render_string_to_frame(std::unique_ptr<RenderedFrame> &frame, EncodeTextContext::RenderPositionOption opt, std::string content)
     {
         // TODO: render to frame *after* it's done with libswscale.
 
-        uint8_t *surface = frame.buffer();
-        uint32_t width = frame.width();
-        uint32_t height = frame.height();
+        uint8_t *surface = frame->buffer();
+        uint32_t width = frame->width();
+        uint32_t height = frame->height();
         FT_Error ret;
         FT_GlyphSlot slot = this->_face->glyph;
         FT_UInt glyph_index;
