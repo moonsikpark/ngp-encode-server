@@ -32,8 +32,12 @@ public:
         this->_pix_fmt = pix_fmt;
         this->_processed = false;
     }
-    RenderedFrame() = default;
-    RenderedFrame(RenderedFrame &&r) = default;
+    // Forbid copying or moving of RenderedFrame.
+    // The frame should be wrapped in unique_ptr to be moved.
+    RenderedFrame(RenderedFrame &&r) = delete;
+    RenderedFrame &operator=(RenderedFrame &&) = delete;
+    RenderedFrame(const RenderedFrame &) = delete;
+    RenderedFrame &operator=(const RenderedFrame &) = delete;
 
     void convert_frame(const AVCodecContext *ctx, AVFrame *frame)
     {
