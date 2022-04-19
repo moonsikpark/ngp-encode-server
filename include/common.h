@@ -58,7 +58,7 @@ class ThreadSafeQueue
 private:
     unsigned int _max_size;
     std::queue<std::unique_ptr<T>> _queue;
-    std::condition_variable _consumer, _producer;
+    std::condition_variable _pusher, _popper;
     std::mutex _mutex;
 
     using unique_lock = std::unique_lock<std::mutex>;
@@ -72,11 +72,11 @@ public:
     void push(U &&item)
     {
         unique_lock lock(this->_mutex);
-        if (this->_producer.wait_for(lock, std::chrono::milliseconds(300), [&]
-                                     { return this->_queue.size() < this->_max_size; }))
+        if (this->_pusher.wait_for(lock, std::chrono::milliseconds(300), [&]
+                                   { return this->_queue.size() < this->_max_size; }))
         {
             this->_queue.push(std::forward<U>(item));
-            _consumer.notify_one();
+            this->_popper.notify_one();
         }
         else
         {
@@ -87,15 +87,12 @@ public:
     std::unique_ptr<T> pop()
     {
         unique_lock lock(this->_mutex);
-        if (this->_consumer.wait_for(lock, std::chrono::milliseconds(300), [&]
-                                     { return this->_queue.size() > 0; }))
+        if (this->_popper.wait_for(lock, std::chrono::milliseconds(300), [&]
+                                   { return this->_queue.size() > 0; }))
         {
             std::unique_ptr<T> item = std::move(this->_queue.front());
-            if (this->_queue.size() == this->_max_size)
-            {
-                this->_producer.notify_all();
-            }
             this->_queue.pop();
+            this->_pusher.notify_one();
             return item;
         }
         else
