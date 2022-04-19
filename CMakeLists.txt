@@ -60,6 +60,7 @@ include_directories("include")
 set(SOURCES
 	src/encode.cpp
 	src/server.cpp
+	src/pov.cpp
 	src/main.cpp
 )
 
