@@ -1,3 +1,5 @@
 build/
 .vscode/
 *.mp4
+massif.out.*
+valgrind*
