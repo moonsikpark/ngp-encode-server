@@ -108,7 +108,6 @@ void send_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFram
 
 void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested)
 {
-    uint64_t frame_count;
     int ret;
 
     while (!shutdown_requested)
@@ -139,12 +138,11 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
                 // Packet pts and dts will be based on wall clock.
                 pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx.get_stream()->time_base);
                 // TODO: add more info to print
-                tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; frame_count=" << frame_count << " pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
+                tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
                 if ((ret = av_interleaved_write_frame(mctx.get_fctx(), pkt)) < 0)
                 {
                     tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
                 }
-                frame_count++;
                 av_packet_free(&pkt);
                 break;
             case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
