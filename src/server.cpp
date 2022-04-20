@@ -81,7 +81,8 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
     // Create nonblocking streaming socket.
     if ((ret = unlink(socket_loc)) < 0)
     {
-        throw std::runtime_error{"socket_main_thread: Failed to unlink previous socket: " + std::string(std::strerror(errno))};
+        // Ignore if unlink fails.
+        // throw std::runtime_error{"socket_main_thread: Failed to unlink previous socket: " + std::string(std::strerror(errno))};
     }
 
     if ((sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0)
@@ -152,17 +153,9 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
         }
         // TODO: measure how much this loop takes.
         // TODO: Get request from request queue.
-        // Request req = req_queue.pop();
+        Request req = req_queue.pop();
         {
             ScopedTimer timer;
-            Request req = {
-                .width = 1280,
-                .height = 720,
-                .rotx = 1,
-                .roty = 0,
-                .dx = -1,
-                .dy = 0,
-                .dz = 0};
 
             RequestResponse resp;
 

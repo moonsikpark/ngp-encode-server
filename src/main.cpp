@@ -113,6 +113,30 @@ int main(int argc, char **argv)
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         };
 
+        ValueFlag<std::string> wsserver_cert_location{
+            parser,
+            "WSS_CERT",
+            "Location of a the certificate file used by the websocket server.",
+            {"wss_cert"},
+            "/home/test/ngp-encode-server/build/server.pem",
+        };
+
+        ValueFlag<std::string> wsserver_dhparam_location{
+            parser,
+            "WSS_DHPARAM",
+            "Location of a the certificate file used by the websocket server.",
+            {"wss_dhparam"},
+            "/home/test/ngp-encode-server/build/dh.pem",
+        };
+
+        ValueFlag<uint16_t> wsserver_bind_port{
+            parser,
+            "WSS_BIND_PORT",
+            "Port the websocket server should bind to.",
+            {"PORT"},
+            9090,
+        };
+
         ValueFlag<std::string> rtsp_server_flag{
             parser,
             "RTSP_SERVER",
@@ -170,6 +194,7 @@ int main(int argc, char **argv)
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
         ThreadSafeQueue<Request> req_frame(100);
         ThreadSafeMap<RenderedFrame> encode_queue(100);
+        POVManager povmgr;
 
         tlog::info() << "Done bootstrapping.";
 
@@ -177,8 +202,11 @@ int main(int argc, char **argv)
         std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
         std::thread _send_frame_thread(send_frame_thread, std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
-        std::thread _pov_websocket_thread(pov_websocket_thread);
-        _pov_websocket_thread.detach();
+        std::thread _pov_websocket_main_thread(pov_websocket_main_thread, std::ref(povmgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
+        std::thread _pov_provider_thread(pov_provider_thread, std::ref(povmgr), std::ref(req_frame), get(fps_flag), std::ref(shutdown_requested));
+
+        _pov_provider_thread.join();
+        _pov_websocket_main_thread.join();
         _process_frame_thread.join();
         _socket_main_thread.join();
         _receive_packet_thread.join();

@@ -51,4 +51,7 @@ public:
     }
 };
 
+void pov_websocket_main_thread(POVManager &povmgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested);
+void pov_provider_thread(POVManager &povmgr, ThreadSafeQueue<Request> &request_queue, int desired_fps, std::atomic<bool> &shutdown_requested);
+
 #endif // _POV_H_
