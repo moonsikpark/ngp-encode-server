@@ -69,7 +69,7 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
     return 0;
 }
 
-void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
 
     tlog::info() << "socket_main_thread: Initalizing socket server...";
@@ -137,7 +137,7 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
     tlog::success() << "socket_main_thread: Exiting thread.";
 }
 
-void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<RenderedFrame> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
