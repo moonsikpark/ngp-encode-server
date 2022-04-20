@@ -58,7 +58,7 @@ class ThreadSafeQueue
 {
 private:
     unsigned int _max_size;
-    std::queue<std::unique_ptr<T>> _queue;
+    std::queue<T> _queue;
     std::condition_variable _pusher, _popper;
     std::mutex _mutex;
 
@@ -83,13 +83,13 @@ public:
         }
     }
 
-    std::unique_ptr<T> pop()
+    T pop()
     {
         unique_lock lock(this->_mutex);
         if (this->_popper.wait_for(lock, std::chrono::milliseconds(300), [&]
                                    { return this->_queue.size() > 0; }))
         {
-            std::unique_ptr<T> item = std::move(this->_queue.front());
+            T item = std::move(this->_queue.front());
             this->_queue.pop();
             this->_pusher.notify_one();
             return item;
