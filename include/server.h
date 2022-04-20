@@ -2,7 +2,7 @@
  *  Copyright (c) Moonsik Park. All rights reserved.
  *
  *  @file   server.h
- *  @author Moonsik Park, Korean Institute of Science and Technology
+ *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
 
 #ifndef _SERVER_H_

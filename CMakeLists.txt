@@ -2,7 +2,7 @@
 #  Copyright (c) Moonsik Park. All rights reserved.
 #
 #  @file   CMakeLists.txt
-#  @author Moonsik Park, Korean Institute of Science and Technology
+#  @author Moonsik Park, Korea Institute of Science and Technology
 #
 
 cmake_minimum_required(VERSION 3.19)

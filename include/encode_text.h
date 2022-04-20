@@ -2,7 +2,7 @@
  *  Copyright (c) Moonsik Park. All rights reserved.
  *
  *  @file   encode_text.h
- *  @author Moonsik Park, Korean Institute of Science and Technology
+ *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
 
 #ifndef _ENCODE_TEXT_H_
