@@ -193,9 +193,9 @@ int main(int argc, char **argv)
 
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
-        ThreadSafeQueue<Request> req_frame(100);
+        ThreadSafeQueue<nesproto::FrameRequest> req_frame(100000000);
         ThreadSafeMap<RenderedFrame> encode_queue(100);
-        POVManager povmgr;
+        CameraManager cameramgr;
 
         tlog::info() << "Done bootstrapping.";
 
@@ -203,11 +203,11 @@ int main(int argc, char **argv)
         std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
         std::thread _send_frame_thread(send_frame_thread, std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
-        std::thread _pov_websocket_main_thread(pov_websocket_main_thread, std::ref(povmgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
-        std::thread _pov_provider_thread(pov_provider_thread, std::ref(povmgr), std::ref(req_frame), get(fps_flag), std::ref(shutdown_requested));
+        std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
+        std::thread _framerequest_provider_thread(framerequest_provider_thread, std::ref(cameramgr), std::ref(req_frame), get(fps_flag), std::ref(shutdown_requested));
 
-        _pov_provider_thread.join();
-        _pov_websocket_main_thread.join();
+        _framerequest_provider_thread.join();
+        _camera_websocket_main_thread.join();
         _process_frame_thread.join();
         _socket_main_thread.join();
         _receive_packet_thread.join();

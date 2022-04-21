@@ -68,7 +68,7 @@ include_directories("include")
 set(SOURCES
 	src/encode.cpp
 	src/server.cpp
-	src/pov.cpp
+	src/camera.cpp
 	src/main.cpp
 )
 

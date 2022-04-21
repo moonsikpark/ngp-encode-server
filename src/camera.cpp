@@ -1,7 +1,7 @@
 /**
  *  Copyright (c) Moonsik Park. All rights reserved.
  *
- *  @file   pov.cpp
+ *  @file   camera.cpp
  *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
 
@@ -25,24 +25,21 @@ using websocketpp::log::alevel;
 typedef websocketpp::config::asio::message_type::ptr message_ptr;
 typedef websocketpp::lib::shared_ptr<websocketpp::lib::asio::ssl::context> context_ptr;
 
-void on_message(server *s, websocketpp::connection_hdl hdl, message_ptr msg, POVManager &povmgr)
+void on_message(server *s, websocketpp::connection_hdl hdl, message_ptr msg, CameraManager &cameramgr)
 {
-    tlog::info() << "pov_websocket_server: Received pov=" << msg->get_payload();
-    // TODO: handle exception when data is not parsable.
-    // crudly parse pov message. currently, the format will be as follows;
-    // x|y|z|rotx|roty
-    std::vector<float> v;
-    std::string st;
-    std::istringstream f(msg->get_payload());
-    for (int i = 0; i < 5; i++)
+    nesproto::Camera cam;
+
+    if (cam.ParseFromString(msg->get_raw_payload()))
     {
-        std::getline(f, st, '|');
-        v.push_back(std::stof(st));
+        cameramgr.set_camera(cam);
+        s->send(hdl, "OK", websocketpp::frame::opcode::text);
+        tlog::success() << "camera_websocket_loop_thread: Got Camera matrix.";
     }
-
-    povmgr.set_pov(POV{v[0], v[1], v[2], v[3], v[4]});
-
-    s->send(hdl, "OK", msg->get_opcode());
+    else
+    {
+        s->send(hdl, "ERR", websocketpp::frame::opcode::text);
+        tlog::error() << "camera_websocket_loop_thread: Got invalid Camera matrix.";
+    }
 }
 
 void on_http(server *s, websocketpp::connection_hdl hdl)
@@ -108,30 +105,30 @@ context_ptr on_tls_init(tls_mode mode, websocketpp::connection_hdl hdl, std::str
     return ctx;
 }
 
-void pov_websocket_loop_thread(POVManager &povmgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, server &server)
+void camera_websocket_loop_thread(CameraManager &cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, server &server)
 {
     server.init_asio();
 
-    server.set_message_handler(bind(&on_message, &server, ::_1, ::_2, std::ref(povmgr)));
+    server.set_message_handler(bind(&on_message, &server, ::_1, ::_2, std::ref(cameramgr)));
     server.set_http_handler(bind(&on_http, &server, ::_1));
     server.set_tls_init_handler(bind(&on_tls_init, MOZILLA_INTERMEDIATE, ::_1, server_cert_location, dhparam_location));
 
     server.listen(bind_port);
-    tlog::info() << "pov_websocket_loop_thread: Successfully initialized Websocket secure server at port " << bind_port << ".";
 
     // Start the server accept loop
     server.start_accept();
+    tlog::info() << "camera_websocket_loop_thread: Successfully initialized Websocket secure server at port " << bind_port << ".";
 
     // Start the ASIO io_service run loop
     server.run();
 }
 
-void pov_websocket_main_thread(POVManager &povmgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested)
+void camera_websocket_main_thread(CameraManager &cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested)
 {
-    server pov_wsserver;
-    pov_wsserver.clear_access_channels(alevel::all);
+    server camera_wsserver;
+    camera_wsserver.clear_access_channels(alevel::all);
 
-    std::thread _pov_websocket_loop_thread(pov_websocket_loop_thread, std::ref(povmgr), bind_port, server_cert_location, dhparam_location, std::ref(pov_wsserver));
+    std::thread _camera_websocket_loop_thread(camera_websocket_loop_thread, std::ref(cameramgr), bind_port, server_cert_location, dhparam_location, std::ref(camera_wsserver));
 
     while (!shutdown_requested)
     {
@@ -140,32 +137,33 @@ void pov_websocket_main_thread(POVManager &povmgr, uint16_t bind_port, std::stri
 
     // todo: stop server gracefully.
 
-    tlog::info() << "pov_websocket_main_thread: Exiting thread.";
+    tlog::info() << "camera_websocket_main_thread: Exiting thread.";
 }
 
-void pov_provider_thread(POVManager &povmgr, ThreadSafeQueue<Request> &request_queue, int desired_fps, std::atomic<bool> &shutdown_requested)
+void framerequest_provider_thread(CameraManager &cameramgr, ThreadSafeQueue<nesproto::FrameRequest> &request_queue, int desired_fps, std::atomic<bool> &shutdown_requested)
 {
     uint64_t index = 0;
     while (!shutdown_requested)
     {
-        POV pov = povmgr.get_pov();
-        tlog::info() << "pov_provider_thread: new pov: index=" << index << " x=" << pov.x << " y=" << pov.y << " z=" << pov.z << " rotx=" << pov.rotx << " roty=" << pov.roty;
+        nesproto::Camera camera = cameramgr.get_camera();
+
         // TODO: Width and height is currently stored in AVCodecContext.
         // Get width, height and fps out of AVCodec scope.
 
-        Request req = {
-            .width = 1280,
-            .height = 720,
-            .rotx = pov.rotx,
-            .roty = pov.roty,
-            .dx = pov.x,
-            .dy = pov.y,
-            .dz = pov.z};
-        tlog::info() << "pov_provider_thread: Created Request instance";
+        nesproto::FrameRequest req;
+
+        // HACK: set this with correct res.
+        req.set_index(index);
+        req.set_width(1280);
+        req.set_height(720);
+        // TODO: how should I put camera data in framerequest?
+        // req.set_allocated_camera(&camera);
+
+        tlog::info() << "framerequest_provider_thread: Created FrameRequest instance";
         request_queue.push(req);
 
         index++;
         std::this_thread::sleep_for(std::chrono::milliseconds(1000 / desired_fps));
     }
-    tlog::info() << "pov_provider_thread: Exiting thread.";
+    tlog::info() << "framerequest_provider_thread: Exiting thread.";
 }

@@ -69,7 +69,7 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
     return 0;
 }
 
-void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_main_thread(std::string socket_location, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
 
     tlog::info() << "socket_main_thread: Initalizing socket server...";
@@ -138,7 +138,7 @@ void socket_main_thread(std::string socket_location, ThreadSafeQueue<Request> &r
     tlog::success() << "socket_main_thread: Exiting thread.";
 }
 
-void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_client_thread(int clientfd, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
@@ -153,14 +153,16 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
         }
         // TODO: measure how much this loop takes.
         // TODO: Get request from request queue.
-        Request req = req_queue.pop();
+        nesproto::FrameRequest req = req_queue.pop();
         {
             ScopedTimer timer;
 
             RequestResponse resp;
 
+            std::string req_serialized = req.SerializeAsString();
+
             // Send request from request queue.
-            if ((ret = socket_send_blocking(clientfd, (uint8_t *)&req, sizeof(Request))) < 0)
+            if ((ret = socket_send_blocking(clientfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
             {
                 continue;
             }
@@ -174,7 +176,8 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<Request> &req_queue, Thr
             // Create a new renderedframe.
             // TODO: Honor index.
             // TODO: change w/h to unsigned int.
-            std::unique_ptr<RenderedFrame> frame = std::make_unique<RenderedFrame>(frame_count, (unsigned int)req.width, (unsigned int)req.height, AV_PIX_FMT_BGR32);
+            // TODO: set this to correct resolution.
+            std::unique_ptr<RenderedFrame> frame = std::make_unique<RenderedFrame>(frame_count, 1280, 720, AV_PIX_FMT_BGR32);
 
             // Receive rendered frame to the buffer of renderedframe.
             if ((ret = socket_receive_blocking(clientfd, frame->buffer(), resp.filesize)) < 0)

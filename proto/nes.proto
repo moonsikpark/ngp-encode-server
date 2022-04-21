@@ -5,3 +5,10 @@ package nesproto;
 message Camera {
     repeated float matrix = 12;
 }
+
+message FrameRequest {
+    uint64 index = 1;
+    Camera camera = 2;
+    uint32 width = 3;
+    uint32 height = 4;
+}

@@ -195,7 +195,7 @@ public:
 #include <encode.h>
 #include <server.h>
 #include <encode_text.h>
-#include <pov.h>
+#include <camera.h>
 #include <muxing.h>
 
 #endif // _COMMON_H_
