@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package nesproto;
+
+message Camera {
+    repeated float matrix = 12;
+}

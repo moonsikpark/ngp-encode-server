@@ -21,6 +21,8 @@
 
 #include <tinylogger/tinylogger.h>
 
+#include <proto/nes.pb.h>
+
 extern "C"
 {
 #include <libavcodec/avcodec.h>

@@ -24,6 +24,7 @@ void signal_handler(int)
 
 int main(int argc, char **argv)
 {
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
     // TODO: Use POSIX standard sigaction(2)
     signal(SIGINT, signal_handler);
     signal(SIGPIPE, SIG_IGN);

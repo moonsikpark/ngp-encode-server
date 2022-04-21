@@ -49,6 +49,9 @@ find_package(Freetype REQUIRED)
 
 find_package(websocketpp REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(Protobuf REQUIRED)
+
+add_subdirectory(proto)
 
 include_directories(${AVCODEC_INCLUDE_DIR})
 include_directories(${AVFORMAT_INCLUDE_DIR})
@@ -56,6 +59,7 @@ include_directories(${AVUTIL_INCLUDE_DIR})
 include_directories(${SWSCALE_INCLUDE_DIR})
 include_directories(${FREETYPE_INCLUDE_DIRS})
 include_directories(${WEBSOCKETPP_INCLUDE_DIR})
+include_directories(${CMAKE_BINARY_DIR})
 
 list(APPEND NES_DEFINITIONS -DNES_VERSION="${NES_VERSION}")
 
@@ -76,7 +80,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR})
 
 add_executable(neserver src/main.cpp)
 add_library(nes STATIC ${SOURCES})
-target_link_libraries(neserver PUBLIC nes)
+target_link_libraries(neserver PUBLIC nes proto)
 target_compile_definitions(neserver PUBLIC ${NES_DEFINITIONS})
 target_include_directories(neserver PRIVATE ${AVCODEC_INCLUDE_DIR} ${AVFORMAT_INCLUDE_DIR} ${AVFILTER_INCLUDE_DIR} ${AVUTIL_INCLUDE_DIR} ${SWSCALE_INCLUDE_DIR} ${FREETYPE_INCLUDE_DIRS} ${WEBSOCKETPP_INCLUDE_DIR} ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(neserver PRIVATE ${AVCODEC_LIBRARY} ${AVFORMAT_LIBRARY} ${AVFILTER_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${FREETYPE_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto)
