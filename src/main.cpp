@@ -193,7 +193,7 @@ int main(int argc, char **argv)
 
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
-        ThreadSafeQueue<nesproto::FrameRequest> req_frame(100000000);
+        ThreadSafeQueue<nesproto::FrameRequest> req_frame(100);
         ThreadSafeMap<RenderedFrame> encode_queue(100);
         CameraManager cameramgr;
 
