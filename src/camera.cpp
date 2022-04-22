@@ -145,8 +145,6 @@ void framerequest_provider_thread(CameraManager &cameramgr, ThreadSafeQueue<nesp
     uint64_t index = 0;
     while (!shutdown_requested)
     {
-        nesproto::Camera camera = cameramgr.get_camera();
-
         // TODO: Width and height is currently stored in AVCodecContext.
         // Get width, height and fps out of AVCodec scope.
 
@@ -156,6 +154,7 @@ void framerequest_provider_thread(CameraManager &cameramgr, ThreadSafeQueue<nesp
         req.set_index(index);
         req.set_width(1280);
         req.set_height(720);
+        req.set_allocated_camera(new nesproto::Camera(cameramgr.get_camera()));
         // TODO: how should I put camera data in framerequest?
         // req.set_allocated_camera(&camera);
 
