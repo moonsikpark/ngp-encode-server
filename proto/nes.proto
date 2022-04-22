@@ -12,3 +12,19 @@ message FrameRequest {
     uint32 width = 3;
     uint32 height = 4;
 }
+
+message RenderedFrame {
+    uint64 index = 1;
+    Camera camera = 2;
+    uint32 width = 3;
+    uint32 height = 4;
+
+    enum PixelFormat {
+      BGR32 = 0;
+      YUV420P = 1;
+    }
+
+    PixelFormat pixelformat = 5;
+    
+    bytes frame = 10;
+}
