@@ -74,7 +74,7 @@ int main(int argc, char **argv)
             "stillimage,zerolatency",
         };
 
-        ValueFlag<int> width_flag{
+        ValueFlag<unsigned int> width_flag{
             parser,
             "WIDTH",
             "Width of requesting image.",
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
             1280,
         };
 
-        ValueFlag<int> height_flag{
+        ValueFlag<unsigned int> height_flag{
             parser,
             "HEIGHT",
             "Height of requesting image.",
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
             720,
         };
 
-        ValueFlag<int> bitrate_flag{
+        ValueFlag<unsigned int> bitrate_flag{
             parser,
             "BITRATE",
             "Bitrate of output stream.",
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
             400000,
         };
 
-        ValueFlag<int> fps_flag{
+        ValueFlag<unsigned int> fps_flag{
             parser,
             "FPS",
             "Frame per second of output stream. This does not guarantee that n frames will be present.",
@@ -181,6 +181,8 @@ int main(int argc, char **argv)
          *       Views rendered from ngp should vary in size, optimized for speed.
          */
 
+        VideoEncodingParams veparams{get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag), AV_PIX_FMT_YUV420P};
+
         tlog::info() << "Initalizing encoder.";
         AVCodecContextManager ctxmgr{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
 
@@ -189,7 +191,7 @@ int main(int argc, char **argv)
 
         tlog::info() << "Initalizing muxing context.";
 
-        MuxingContext mctx{ctxmgr.get_const_context(), get(rtsp_server_flag)};
+        MuxingContext mctx{ctxmgr.get_context(), get(rtsp_server_flag)};
 
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
@@ -200,11 +202,11 @@ int main(int argc, char **argv)
         tlog::info() << "Done bootstrapping.";
 
         std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
-        std::thread _process_frame_thread(process_frame_thread, std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
-        std::thread _send_frame_thread(send_frame_thread, std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
+        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
         std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
-        std::thread _framerequest_provider_thread(framerequest_provider_thread, std::ref(cameramgr), std::ref(req_frame), get(fps_flag), std::ref(shutdown_requested));
+        std::thread _framerequest_provider_thread(framerequest_provider_thread, std::ref(veparams), std::ref(cameramgr), std::ref(req_frame), std::ref(shutdown_requested));
 
         _framerequest_provider_thread.join();
         _camera_websocket_main_thread.join();

@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
     uint64_t frame_index;
@@ -34,7 +34,7 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::un
 
                 etctx.render_string_to_frame(frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("index=") + std::to_string(frame_index));
 
-                frame->convert_frame(ctxmgr.get_const_context());
+                frame->convert_frame(veparams);
 
                 encode_queue.insert(frame_index, std::move(frame));
                 tlog::info() << "process_frame_thread (index=" << frame_index << "): processed frame in " << timer.elapsed().count() << " msec.";
@@ -49,10 +49,9 @@ void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::un
     tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
+void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm;
-    const AVCodecContext *ctx = ctxmgr.get_const_context();
     uint64_t index = 0;
     int ret;
 
@@ -69,24 +68,24 @@ void send_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFram
             {
                 ScopedTimer timer;
 
-                frm->format = ctx->pix_fmt;
-                frm->width = ctx->width;
-                frm->height = ctx->height;
+                frm->format = veparams.pix_fmt();
+                frm->width = veparams.width();
+                frm->height = veparams.height();
 
-                if ((ret = av_image_alloc(frm->data, frm->linesize, ctx->width, ctx->height, ctx->pix_fmt, 32)) < 0)
+                if ((ret = av_image_alloc(frm->data, frm->linesize, veparams.width(), veparams.height(), veparams.pix_fmt(), 32)) < 0)
                 {
                     throw std::runtime_error{std::string("send_frame_thread: Failed to allocate AVFrame data: ") + averror_explain(ret)};
                 }
 
-                ret = av_image_fill_pointers(frm->data, ctx->pix_fmt, ctx->height, processed_frame->processed_data(), processed_frame->processed_linesize());
+                ret = av_image_fill_pointers(frm->data, veparams.pix_fmt(), veparams.height(), processed_frame->processed_data(), processed_frame->processed_linesize());
                 {
                     ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
-                    AVCodecContext *cctx = lock.get();
+                    AVCodecContext *ctx = lock.get();
 
                     // TODO: handle error codes!
                     // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
                     // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
-                    ret = avcodec_send_frame(cctx, frm);
+                    ret = avcodec_send_frame(ctx, frm);
                 }
                 av_frame_unref(frm);
                 tlog::info() << "send_frame_thread (index=" << index << "): sent frame to encoder in " << timer.elapsed().count() << " msec.";

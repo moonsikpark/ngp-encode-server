@@ -140,7 +140,7 @@ void camera_websocket_main_thread(CameraManager &cameramgr, uint16_t bind_port, 
     tlog::info() << "camera_websocket_main_thread: Exiting thread.";
 }
 
-void framerequest_provider_thread(CameraManager &cameramgr, ThreadSafeQueue<nesproto::FrameRequest> &request_queue, int desired_fps, std::atomic<bool> &shutdown_requested)
+void framerequest_provider_thread(VideoEncodingParams &veparams, CameraManager &cameramgr, ThreadSafeQueue<nesproto::FrameRequest> &request_queue, std::atomic<bool> &shutdown_requested)
 {
     uint64_t index = 0;
     while (!shutdown_requested)
@@ -149,15 +149,15 @@ void framerequest_provider_thread(CameraManager &cameramgr, ThreadSafeQueue<nesp
 
         // HACK: set this with correct res when we replace AVCodecContext.
         req.set_index(index);
-        req.set_width(1280);
-        req.set_height(720);
+        req.set_width(veparams.width());
+        req.set_height(veparams.height());
         req.set_allocated_camera(new nesproto::Camera(cameramgr.get_camera()));
 
         tlog::info() << "framerequest_provider_thread: Created FrameRequest instance";
         request_queue.push(req);
 
         index++;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000 / desired_fps));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000 / veparams.fps()));
     }
     tlog::info() << "framerequest_provider_thread: Exiting thread.";
 }

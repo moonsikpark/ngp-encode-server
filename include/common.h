@@ -39,6 +39,40 @@ class lock_timeout : public std::exception
     }
 };
 
+class VideoEncodingParams
+{
+private:
+    unsigned int _width;
+    unsigned int _height;
+    unsigned int _bitrate;
+    unsigned int _fps;
+    AVPixelFormat _pix_fmt;
+
+public:
+    VideoEncodingParams(unsigned int width, unsigned int height, unsigned int bitrate, unsigned int fps, AVPixelFormat pix_fmt) : _width(width), _height(height), _bitrate(bitrate), _fps(fps), _pix_fmt(pix_fmt) {}
+
+    const unsigned int width() const
+    {
+        return this->_width;
+    }
+    const unsigned int height() const
+    {
+        return this->_height;
+    }
+    const unsigned int bitrate() const
+    {
+        return this->_bitrate;
+    }
+    const unsigned int fps() const
+    {
+        return this->_fps;
+    }
+    const AVPixelFormat pix_fmt() const
+    {
+        return this->_pix_fmt;
+    }
+};
+
 template <class T>
 class ThreadSafeQueue
 {
