@@ -54,7 +54,7 @@ public:
         return false;
     }
 
-    void convert_frame(const AVCodecContext *ctx)
+    void convert_frame(VideoEncodingParams &veparams)
     {
         if (this->_processed)
         {
@@ -66,9 +66,9 @@ public:
             this->width(),
             this->height(),
             this->_pix_fmt,
-            ctx->width,
-            ctx->height,
-            ctx->pix_fmt,
+            veparams.width(),
+            veparams.height(),
+            veparams.pix_fmt(),
             0,
             0,
             0,
@@ -79,7 +79,7 @@ public:
             throw std::runtime_error{"Failed to allocate sws_context."};
         }
 
-        if (av_image_alloc(this->_processed_data, this->_processed_linesize, ctx->width, ctx->height, ctx->pix_fmt, 32) < 0)
+        if (av_image_alloc(this->_processed_data, this->_processed_linesize, veparams.width(), veparams.height(), veparams.pix_fmt(), 32) < 0)
         {
             tlog::error("Failed to allocate frame data.");
         }
@@ -159,7 +159,7 @@ private:
     std::mutex _mutex;
 
 public:
-    AVCodecContextManager(AVCodecID codec_id, AVPixelFormat pix_fmt, std::string x264_encode_preset, std::string x264_encode_tune, int width, int height, int bit_rate, int fps)
+    AVCodecContextManager(AVCodecID codec_id, AVPixelFormat pix_fmt, std::string x264_encode_preset, std::string x264_encode_tune, unsigned int width, unsigned int height, unsigned int bit_rate, unsigned int fps)
     {
         int ret;
         AVCodec *codec;
@@ -178,7 +178,7 @@ public:
         this->_ctx->bit_rate = bit_rate;
         this->_ctx->width = width;
         this->_ctx->height = height;
-        this->_ctx->time_base = (AVRational){1, fps};
+        this->_ctx->time_base = (AVRational){1, (int)fps};
         this->_ctx->pix_fmt = pix_fmt;
 
         av_dict_set(&options, "preset", x264_encode_preset.c_str(), 0);
@@ -198,11 +198,6 @@ public:
         return this->_mutex;
     }
 
-    const AVCodecContext *get_const_context() const
-    {
-        return this->_ctx;
-    }
-
     AVCodecContext *get_context()
     {
         return this->_ctx;
@@ -220,8 +215,8 @@ public:
 
 #include <muxing.h>
 #include <encode_text.h>
-void process_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested);
-void send_frame_thread(AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested);
+void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested);
+void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested);
 void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested);
 
 #endif // _ENCODE_H_
