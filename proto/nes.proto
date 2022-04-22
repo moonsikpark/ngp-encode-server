@@ -26,5 +26,6 @@ message RenderedFrame {
 
     PixelFormat pixelformat = 5;
     
-    bytes frame = 10;
+    bytes frame = 6;
+    bytes depth = 7;
 }
