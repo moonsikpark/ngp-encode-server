@@ -27,7 +27,7 @@ public:
     {
         unique_lock lock(this->_mutex);
         // XXX: Is it okay to not wait for the conditional_variable??
-        this->_camera = std::move(camera);
+        this->_camera = camera;
     }
 
     nesproto::Camera get_camera()
