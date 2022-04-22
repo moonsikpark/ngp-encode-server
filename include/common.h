@@ -31,22 +31,6 @@ extern "C"
 #include <libavutil/imgutils.h>
 }
 
-typedef struct
-{
-    uint32_t width;
-    uint32_t height;
-    float rotx;
-    float roty;
-    float dx;
-    float dy;
-    float dz;
-} __attribute__((packed)) Request;
-
-typedef struct
-{
-    uint32_t filesize;
-} __attribute__((packed)) RequestResponse;
-
 class lock_timeout : public std::exception
 {
     virtual const char *what() const throw()

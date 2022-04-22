@@ -38,6 +38,25 @@ int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
     return 0;
 }
 
+// Send message with length prefix framing.
+int socket_send_blocking_lpf(int clientfd, uint8_t *buf, size_t size)
+{
+    int ret;
+    // hack: not very platform portable
+    // but then, the program isn't.
+    if ((ret = socket_send_blocking(clientfd, (uint8_t *)&size, sizeof(size))) < 0)
+    {
+        goto end;
+    }
+
+    if ((ret = socket_send_blocking(clientfd, buf, size)) < 0)
+    {
+        goto end;
+    }
+end:
+    return ret;
+}
+
 int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
 {
     ssize_t ret;
@@ -67,6 +86,28 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
     }
 
     return 0;
+}
+
+// Receive message with length prefix framing.
+std::string socket_receive_blocking_lpf(int clientfd)
+{
+    int ret;
+    size_t size;
+    // hack: not very platform portable
+    // todo: silently fail, do not wail error.
+    if ((ret = socket_receive_blocking(clientfd, (uint8_t *)&size, sizeof(size))) < 0)
+    {
+        throw std::runtime_error{"socket_receive_blocking_lpf: Error while receiving data size from socket."};
+    }
+
+    auto buffer = std::make_unique<char[]>(size);
+
+    if ((ret = socket_receive_blocking(clientfd, (uint8_t *)buffer.get(), size)) < 0)
+    {
+        throw std::runtime_error{"socket_receive_blocking_lpf: Error while receiving data from socket."};
+    }
+
+    return std::string(buffer.get(), buffer.get() + size);
 }
 
 void socket_main_thread(std::string socket_location, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
@@ -157,18 +198,17 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<nesproto::FrameRequest> 
         {
             ScopedTimer timer;
 
-            RequestResponse resp;
-
             std::string req_serialized = req.SerializeAsString();
 
             // Send request from request queue.
-            if ((ret = socket_send_blocking(clientfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
+            if ((ret = socket_send_blocking_lpf(clientfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
             {
                 continue;
             }
 
-            // Receive requestresponse from client.
-            if ((ret = socket_receive_blocking(clientfd, (uint8_t *)&resp, sizeof(RequestResponse))) < 0)
+            nesproto::RenderedFrame frame;
+
+            if (!frame.ParseFromString(socket_receive_blocking_lpf(clientfd)))
             {
                 continue;
             }
@@ -177,18 +217,12 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<nesproto::FrameRequest> 
             // TODO: Honor index.
             // TODO: change w/h to unsigned int.
             // TODO: set this to correct resolution.
-            std::unique_ptr<RenderedFrame> frame = std::make_unique<RenderedFrame>(frame_count, 1280, 720, AV_PIX_FMT_BGR32);
-
-            // Receive rendered frame to the buffer of renderedframe.
-            if ((ret = socket_receive_blocking(clientfd, frame->buffer(), resp.filesize)) < 0)
-            {
-                continue;
-            }
+            std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR32);
 
             try
             {
                 // Push the frame to the frame queue.
-                frame_queue.push(std::move(frame));
+                frame_queue.push(std::move(frame_o));
             }
             catch (const lock_timeout &)
             {

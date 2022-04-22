@@ -19,29 +19,22 @@ std::string averror_explain(int err);
 
 class RenderedFrame
 {
-    uint64_t _index;
-    uint32_t _width;
-    uint32_t _height;
-    std::unique_ptr<uint8_t> _buf;
+    nesproto::RenderedFrame _frame;
     uint8_t *_processed_data[AV_NUM_DATA_POINTERS];
     int _processed_linesize[AV_NUM_DATA_POINTERS];
 
+    // phase out pix_fmt
     AVPixelFormat _pix_fmt;
     struct SwsContext *_sws_ctx;
     bool _processed;
 
 public:
-    RenderedFrame(uint64_t index,
-                  uint32_t width,
-                  uint32_t height,
-                  AVPixelFormat pix_fmt) : _index(index),
-                                           _width(width),
-                                           _height(height),
-                                           _buf(
-                                               std::unique_ptr<uint8_t>(
-                                                   new uint8_t[width * height * 4])),
-                                           _pix_fmt(pix_fmt),
-                                           _processed(false) {}
+    RenderedFrame(nesproto::RenderedFrame frame,
+                  AVPixelFormat pix_fmt) : _pix_fmt(pix_fmt),
+                                           _processed(false)
+    {
+        this->_frame = frame;
+    }
     // Forbid copying or moving of RenderedFrame.
     // The frame should be wrapped in unique_ptr to be moved.
     RenderedFrame(RenderedFrame &&r) = delete;
@@ -52,7 +45,7 @@ public:
     friend bool operator<(const RenderedFrame &lhs, const RenderedFrame &rhs)
     {
         // Compare frames by their index.
-        return lhs._index < rhs._index;
+        return lhs.index() < rhs.index();
     }
 
     friend bool operator==(const RenderedFrame &, const RenderedFrame &)
@@ -70,8 +63,8 @@ public:
 
         // TODO: specify flags
         this->_sws_ctx = sws_getContext(
-            this->_width,
-            this->_height,
+            this->width(),
+            this->height(),
             this->_pix_fmt,
             ctx->width,
             ctx->height,
@@ -95,39 +88,39 @@ public:
         int in_ls[AV_NUM_DATA_POINTERS] = {0};
         for (int plane = 0; plane < in_pixfmt->nb_components; plane++)
         {
-            in_ls[plane] = av_image_get_linesize(this->_pix_fmt, this->_width, plane);
+            in_ls[plane] = av_image_get_linesize(this->_pix_fmt, this->width(), plane);
         }
-        uint8_t *in_data[1] = {(uint8_t *)this->_buf.get()};
+        uint8_t *in_data[1] = {(uint8_t *)this->buffer()};
 
         sws_scale(this->_sws_ctx,
                   in_data,
                   in_ls,
                   0,
-                  this->_height,
+                  this->height(),
                   this->_processed_data,
                   this->_processed_linesize);
 
         this->_processed = true;
     }
 
-    const uint64_t &index() const
+    const uint64_t index() const
     {
-        return this->_index;
+        return this->_frame.index();
     }
 
-    uint8_t *buffer() const
+    uint8_t *buffer()
     {
-        return this->_buf.get();
+        return (uint8_t *)this->_frame.frame().data();
     }
 
     const uint32_t width() const
     {
-        return this->_width;
+        return this->_frame.width();
     }
 
     const uint32_t height() const
     {
-        return this->_height;
+        return this->_frame.height();
     }
 
     uint8_t *processed_data()
