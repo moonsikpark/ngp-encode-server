@@ -23,6 +23,13 @@ private:
     using unique_lock = std::unique_lock<std::mutex>;
 
 public:
+    CameraManager()
+    {
+        float init[] = {1.0f, 0.0f, 0.0f, 0.5f,
+                        0.0f, -1.0f, 0.0f, 0.5f,
+                        0.0f, 0.0f, -1.0f, 0.5f};
+        *this->_camera.mutable_matrix() = {init, init + 12};
+    }
     void set_camera(nesproto::Camera camera)
     {
         unique_lock lock(this->_mutex);
