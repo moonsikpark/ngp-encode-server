@@ -45,9 +45,10 @@ private:
     unsigned int _width;
     unsigned int _height;
     unsigned int _bitrate;
+    unsigned int _fps;
 
 public:
-    VideoEncodingParams(unsigned int width, unsigned int height, unsigned int bitrate) : _width(width), _height(height), _bitrate(bitrate) {}
+    VideoEncodingParams(unsigned int width, unsigned int height, unsigned int bitrate, unsigned int fps) : _width(width), _height(height), _bitrate(bitrate), _fps(fps) {}
 
     const unsigned int width() const
     {
@@ -61,7 +62,11 @@ public:
     {
         return this->_bitrate;
     }
-}
+    const unsigned int fps() const
+    {
+        return this->_fps;
+    }
+};
 
 template <class T>
 class ThreadSafeQueue
