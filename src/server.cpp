@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int socket_send_blocking(int clientfd, uint8_t *buf, ssize_t size)
+int socket_send_blocking(int clientfd, uint8_t *buf, size_t size)
 {
     ssize_t ret;
     ssize_t sent = 0;
@@ -57,7 +57,7 @@ end:
     return ret;
 }
 
-int socket_receive_blocking(int clientfd, uint8_t *buf, ssize_t size)
+int socket_receive_blocking(int clientfd, uint8_t *buf, size_t size)
 {
     ssize_t ret;
     ssize_t recv = 0;
