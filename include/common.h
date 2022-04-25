@@ -91,7 +91,7 @@ public:
     void push(U &&item)
     {
         unique_lock lock(this->_mutex);
-        if (this->_pusher.wait_for(lock, std::chrono::milliseconds(300), [&]
+        if (this->_pusher.wait_for(lock, std::chrono::milliseconds(10000), [&]
                                    { return this->_queue.size() < this->_max_size; }))
         {
             this->_queue.push(std::forward<U>(item));
@@ -106,7 +106,7 @@ public:
     T pop()
     {
         unique_lock lock(this->_mutex);
-        if (this->_popper.wait_for(lock, std::chrono::milliseconds(300), [&]
+        if (this->_popper.wait_for(lock, std::chrono::milliseconds(10000), [&]
                                    { return this->_queue.size() > 0; }))
         {
             T item = std::move(this->_queue.front());
@@ -139,7 +139,7 @@ public:
     void insert(uint64_t index, U &&item)
     {
         unique_lock lock(this->_mutex);
-        if (this->_inserter.wait_for(lock, std::chrono::milliseconds(300), [&]
+        if (this->_inserter.wait_for(lock, std::chrono::milliseconds(10000), [&]
                                      { return this->_map.size() < this->_max_size; }))
         {
             this->_map.insert({index, std::forward<U>(item)});
@@ -154,7 +154,7 @@ public:
     std::unique_ptr<T> pop_el(uint64_t index)
     {
         unique_lock lock(this->_mutex);
-        if (this->_getter.wait_for(lock, std::chrono::milliseconds(300), [&]
+        if (this->_getter.wait_for(lock, std::chrono::milliseconds(10000), [&]
                                    { return this->_map.contains(index); }))
         {
             std::unique_ptr<T> it = std::move(this->_map.at(index));
