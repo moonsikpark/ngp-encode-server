@@ -110,31 +110,23 @@ std::string socket_receive_blocking_lpf(int targetfd)
     return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_main_thread(std::string socket_location, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_main_thread(std::string bind_address, uint16_t bind_port, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
 
-    tlog::info() << "socket_main_thread: Initalizing socket server...";
-    struct sockaddr_un addr;
+    tlog::info() << "socket_main_thread: Initalizing server...";
+    struct sockaddr_in addr;
     int sockfd, targetfd, ret;
 
-    const char *socket_loc = socket_location.c_str();
-
-    // Create nonblocking streaming socket.
-    if ((ret = unlink(socket_loc)) < 0)
-    {
-        // Ignore if unlink fails.
-        // throw std::runtime_error{"socket_main_thread: Failed to unlink previous socket: " + std::string(std::strerror(errno))};
-    }
-
-    if ((sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0)
+    if ((sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0)
     {
         throw std::runtime_error{"socket_main_thread: Failed to create socket: " + std::string(std::strerror(errno))};
     }
 
     // Bind the socket to the given address.
     memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_loc, sizeof(addr.sun_path) - 1);
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(bind_address.c_str());
+    addr.sin_port = htons(bind_port);
     if ((bind(sockfd, (struct sockaddr *)&(addr), sizeof(addr))) < 0)
     {
         throw std::runtime_error{"socket_main_thread: Failed to bind to socket: " + std::string(std::strerror(errno))};

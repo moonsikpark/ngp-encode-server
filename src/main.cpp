@@ -52,17 +52,25 @@ int main(int argc, char **argv)
 
         ValueFlag<std::string> address_flag{
             parser,
-            "ADDRESS",
-            "Location of the unix socket.",
+            "BIND_ADDRESS",
+            "Address to bind to.",
             {'a', "address"},
-            "/tmp/ngp.sock",
+            "0.0.0.0",
+        };
+
+        ValueFlag<uint16_t> port_flag{
+            parser,
+            "BIND_PORT",
+            "Port to bind to.",
+            {"p", "port"},
+            9991,
         };
 
         ValueFlag<std::string> encode_preset_flag{
             parser,
             "ENCODE_PRESET",
             "Encode preset {ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow (default), placebo}",
-            {'p', "encode_preset"},
+            {"encode_preset"},
             "ultrafast",
         };
 
@@ -201,7 +209,7 @@ int main(int argc, char **argv)
 
         tlog::info() << "Done bootstrapping.";
 
-        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
+        std::thread _socket_main_thread(socket_main_thread, get(address_flag), get(port_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
         std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
         std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
