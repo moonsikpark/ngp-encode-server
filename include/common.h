@@ -153,7 +153,10 @@ public:
 
     std::unique_ptr<T> pop_el(uint64_t index)
     {
+        // TODO: When popping, delete frames where frame_index < index
+        // to prevent any leftover frames hogging memory.
         unique_lock lock(this->_mutex);
+        // This timeout value is crucial to skip frames that are taking too long.
         if (this->_getter.wait_for(lock, std::chrono::milliseconds(10000), [&]
                                    { return this->_map.contains(index); }))
         {

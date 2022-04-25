@@ -122,8 +122,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
             tlog::info() << "socket_client_thread (fd=" << targetfd << "): Error occured. Exiting.";
             break;
         }
-        // TODO: measure how much this loop takes.
-        // TODO: Get request from request queue.
+
         nesproto::FrameRequest req = req_queue.pop();
         {
             ScopedTimer timer;
