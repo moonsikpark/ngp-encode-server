@@ -135,7 +135,11 @@ void camera_websocket_main_thread(CameraManager &cameramgr, uint16_t bind_port, 
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
-    // todo: stop server gracefully.
+    camera_wsserver.stop();
+    if (_camera_websocket_loop_thread.joinable())
+    {
+        _camera_websocket_loop_thread.join();
+    }
 
     tlog::info() << "camera_websocket_main_thread: Exiting thread.";
 }
