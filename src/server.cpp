@@ -110,67 +110,6 @@ std::string socket_receive_blocking_lpf(int targetfd)
     return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_main_thread(std::string bind_address, uint16_t bind_port, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
-{
-
-    tlog::info() << "socket_main_thread: Initalizing server...";
-    struct sockaddr_in addr;
-    int sockfd, targetfd, ret;
-
-    if ((sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0)
-    {
-        throw std::runtime_error{"socket_main_thread: Failed to create socket: " + std::string(std::strerror(errno))};
-    }
-
-    // Bind the socket to the given address.
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr(bind_address.c_str());
-    addr.sin_port = htons(bind_port);
-    if ((bind(sockfd, (struct sockaddr *)&(addr), sizeof(addr))) < 0)
-    {
-        throw std::runtime_error{"socket_main_thread: Failed to bind to socket: " + std::string(std::strerror(errno))};
-    }
-
-    // Listen to the socket.
-    if ((listen(sockfd, /* backlog= */ 2)) < 0)
-    {
-        throw std::runtime_error{"Failed to listen to socket: " + std::string(std::strerror(errno))};
-    }
-
-    tlog::success() << "socket_main_thread: Socket server created and listening.";
-
-    while (!shutdown_requested)
-    {
-        // Wait for connections, but don't block if there aren't any connections.
-        if ((targetfd = accept4(sockfd, NULL, NULL, SOCK_NONBLOCK)) < 0)
-        {
-            // There are no clients to accept.
-            if (errno == EAGAIN || errno == EINTR || errno == ECONNABORTED)
-            {
-                // Sleep and wait again for connections.
-                std::this_thread::sleep_for(std::chrono::milliseconds{500});
-                continue;
-            }
-            else
-            {
-                throw std::runtime_error{"socket_main_thread: Failed to accept client: " + std::string(std::strerror(errno))};
-            }
-        }
-        else
-        {
-            // A client wants to connect. Spawn a thread with the client's fd and process the client there.
-            // TODO: maybe not thread per client but thread pool?
-            std::thread _socket_client_thread(socket_client_thread, targetfd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
-            _socket_client_thread.detach();
-            tlog::success() << "socket_main_thread: Received client connection (targetfd=" << targetfd << ").";
-        }
-    }
-    // Cleanup: close the socket.
-    close(sockfd);
-    tlog::success() << "socket_main_thread: Exiting thread.";
-}
-
 void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
     int ret = 0;
@@ -229,4 +168,59 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
     // Cleanup: close the client socket.
     close(targetfd);
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Exiting thread.";
+}
+
+void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+{
+    std::vector<std::thread> thr;
+
+    tlog::info() << "socket_main_thread: Connecting to renderers.";
+
+    for (const auto renderer : renderers)
+    {
+        std::stringstream renderer_parsed(renderer);
+
+        std::string ip;
+        std::string port_str;
+
+        std::getline(renderer_parsed, ip, ':');
+        std::getline(renderer_parsed, port_str, ':');
+
+        uint16_t port((uint16_t)std::stoi(port_str));
+
+        int fd;
+
+        struct sockaddr_in addr;
+
+        tlog::info() << "socket_main_thread: Connecting to renderer at ip=" << ip << " port=" << port;
+
+        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        {
+            throw std::runtime_error{"Failed to create socket: " + std::string(std::strerror(errno))};
+        }
+
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr(ip.c_str());
+        addr.sin_port = htons(port);
+        if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        {
+            throw std::runtime_error{"Failed to connect: " + std::string(std::strerror(errno))};
+        }
+        tlog::success() << "socket_main_thread: Connected to " << renderer;
+
+        thr.push_back(std::thread(socket_client_thread, fd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested)));
+    }
+
+    tlog::info() << "socket_main_thread: Connectd to all renderers.";
+
+    for (auto &th : thr)
+    {
+        if (th.joinable())
+        {
+            th.join();
+        }
+    }
+
+    tlog::info() << "socket_main_thread: Closed all connections. Exiting thread.";
 }
