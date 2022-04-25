@@ -50,19 +50,33 @@ int main(int argc, char **argv)
             {'v', "version"},
         };
 
+        ValueFlagList<std::string> renderer_addr_flag{
+            parser,
+            "RENDERER_ADDR",
+            "Address(es) of the renderers.",
+            {"r", "renderer"}};
+
         ValueFlag<std::string> address_flag{
             parser,
-            "ADDRESS",
-            "Location of the unix socket.",
+            "BIND_ADDRESS",
+            "Address to bind to.",
             {'a', "address"},
-            "/tmp/ngp.sock",
+            "0.0.0.0",
+        };
+
+        ValueFlag<uint16_t> port_flag{
+            parser,
+            "BIND_PORT",
+            "Port to bind to.",
+            {"p", "port"},
+            9991,
         };
 
         ValueFlag<std::string> encode_preset_flag{
             parser,
             "ENCODE_PRESET",
             "Encode preset {ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow (default), placebo}",
-            {'p', "encode_preset"},
+            {"encode_preset"},
             "ultrafast",
         };
 
@@ -201,19 +215,30 @@ int main(int argc, char **argv)
 
         tlog::info() << "Done bootstrapping.";
 
-        std::thread _socket_main_thread(socket_main_thread, get(address_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
-        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
-        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
-        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
-        std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
-        std::thread _framerequest_provider_thread(framerequest_provider_thread, std::ref(veparams), std::ref(cameramgr), std::ref(req_frame), std::ref(shutdown_requested));
+        std::vector<std::thread> threads;
 
-        _framerequest_provider_thread.join();
-        _camera_websocket_main_thread.join();
-        _process_frame_thread.join();
-        _socket_main_thread.join();
-        _receive_packet_thread.join();
-        _send_frame_thread.join();
+        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
+        threads.push_back(std::move(_socket_main_thread));
+
+        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
+        threads.push_back(std::move(_process_frame_thread));
+
+        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
+        threads.push_back(std::move(_receive_packet_thread));
+
+        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
+        threads.push_back(std::move(_send_frame_thread));
+
+        std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
+        threads.push_back(std::move(_camera_websocket_main_thread));
+
+        std::thread _framerequest_provider_thread(framerequest_provider_thread, std::ref(veparams), std::ref(cameramgr), std::ref(req_frame), std::ref(shutdown_requested));
+        threads.push_back(std::move(_framerequest_provider_thread));
+
+        for (auto &th : threads)
+        {
+            th.join();
+        }
 
         tlog::info() << "All threads are terminated. Shutting down.";
     }

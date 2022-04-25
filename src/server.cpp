@@ -13,14 +13,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int socket_send_blocking(int clientfd, uint8_t *buf, size_t size)
+int socket_send_blocking(int targetfd, uint8_t *buf, size_t size)
 {
     ssize_t ret;
     ssize_t sent = 0;
 
     while (sent < size)
     {
-        ret = send(clientfd, buf + sent, size - sent, MSG_NOSIGNAL);
+        ret = send(targetfd, buf + sent, size - sent, MSG_NOSIGNAL);
         if (ret < 0)
         {
             // Buffer is full. Try again.
@@ -39,17 +39,17 @@ int socket_send_blocking(int clientfd, uint8_t *buf, size_t size)
 }
 
 // Send message with length prefix framing.
-int socket_send_blocking_lpf(int clientfd, uint8_t *buf, size_t size)
+int socket_send_blocking_lpf(int targetfd, uint8_t *buf, size_t size)
 {
     int ret;
     // hack: not very platform portable
     // but then, the program isn't.
-    if ((ret = socket_send_blocking(clientfd, (uint8_t *)&size, sizeof(size))) < 0)
+    if ((ret = socket_send_blocking(targetfd, (uint8_t *)&size, sizeof(size))) < 0)
     {
         goto end;
     }
 
-    if ((ret = socket_send_blocking(clientfd, buf, size)) < 0)
+    if ((ret = socket_send_blocking(targetfd, buf, size)) < 0)
     {
         goto end;
     }
@@ -57,14 +57,14 @@ end:
     return ret;
 }
 
-int socket_receive_blocking(int clientfd, uint8_t *buf, size_t size)
+int socket_receive_blocking(int targetfd, uint8_t *buf, size_t size)
 {
     ssize_t ret;
     ssize_t recv = 0;
 
     while (recv < size)
     {
-        ret = read(clientfd, buf + recv, size - recv);
+        ret = read(targetfd, buf + recv, size - recv);
         if (ret < 0)
         {
             // Buffer is full. Try again.
@@ -89,20 +89,20 @@ int socket_receive_blocking(int clientfd, uint8_t *buf, size_t size)
 }
 
 // Receive message with length prefix framing.
-std::string socket_receive_blocking_lpf(int clientfd)
+std::string socket_receive_blocking_lpf(int targetfd)
 {
     int ret;
     size_t size;
     // hack: not very platform portable
     // todo: silently fail, do not wail error.
-    if ((ret = socket_receive_blocking(clientfd, (uint8_t *)&size, sizeof(size))) < 0)
+    if ((ret = socket_receive_blocking(targetfd, (uint8_t *)&size, sizeof(size))) < 0)
     {
         throw std::runtime_error{"socket_receive_blocking_lpf: Error while receiving data size from socket."};
     }
 
     auto buffer = std::make_unique<char[]>(size);
 
-    if ((ret = socket_receive_blocking(clientfd, (uint8_t *)buffer.get(), size)) < 0)
+    if ((ret = socket_receive_blocking(targetfd, (uint8_t *)buffer.get(), size)) < 0)
     {
         throw std::runtime_error{"socket_receive_blocking_lpf: Error while receiving data from socket."};
     }
@@ -110,86 +110,16 @@ std::string socket_receive_blocking_lpf(int clientfd)
     return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_main_thread(std::string socket_location, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
-{
-
-    tlog::info() << "socket_main_thread: Initalizing socket server...";
-    struct sockaddr_un addr;
-    int sockfd, clientfd, ret;
-
-    const char *socket_loc = socket_location.c_str();
-
-    // Create nonblocking streaming socket.
-    if ((ret = unlink(socket_loc)) < 0)
-    {
-        // Ignore if unlink fails.
-        // throw std::runtime_error{"socket_main_thread: Failed to unlink previous socket: " + std::string(std::strerror(errno))};
-    }
-
-    if ((sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0)
-    {
-        throw std::runtime_error{"socket_main_thread: Failed to create socket: " + std::string(std::strerror(errno))};
-    }
-
-    // Bind the socket to the given address.
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_loc, sizeof(addr.sun_path) - 1);
-    if ((bind(sockfd, (struct sockaddr *)&(addr), sizeof(addr))) < 0)
-    {
-        throw std::runtime_error{"socket_main_thread: Failed to bind to socket: " + std::string(std::strerror(errno))};
-    }
-
-    // Listen to the socket.
-    if ((listen(sockfd, /* backlog= */ 2)) < 0)
-    {
-        throw std::runtime_error{"Failed to listen to socket: " + std::string(std::strerror(errno))};
-    }
-
-    tlog::success() << "socket_main_thread: Socket server created and listening.";
-
-    while (!shutdown_requested)
-    {
-        // Wait for connections, but don't block if there aren't any connections.
-        if ((clientfd = accept4(sockfd, NULL, NULL, SOCK_NONBLOCK)) < 0)
-        {
-            // There are no clients to accept.
-            if (errno == EAGAIN || errno == EINTR || errno == ECONNABORTED)
-            {
-                // Sleep and wait again for connections.
-                std::this_thread::sleep_for(std::chrono::milliseconds{500});
-                continue;
-            }
-            else
-            {
-                throw std::runtime_error{"socket_main_thread: Failed to accept client: " + std::string(std::strerror(errno))};
-            }
-        }
-        else
-        {
-            // A client wants to connect. Spawn a thread with the client's fd and process the client there.
-            // TODO: maybe not thread per client but thread pool?
-            std::thread _socket_client_thread(socket_client_thread, clientfd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
-            _socket_client_thread.detach();
-            tlog::success() << "socket_main_thread: Received client connection (clientfd=" << clientfd << ").";
-        }
-    }
-    // Cleanup: close the socket.
-    close(sockfd);
-    tlog::success() << "socket_main_thread: Exiting thread.";
-}
-
-void socket_client_thread(int clientfd, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
     int ret = 0;
-    tlog::info() << "socket_client_thread (fd=" << clientfd << "): Spawned.";
-    uint64_t frame_count = 0; // XXX HACK
+    tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
     while (!shutdown_requested)
     {
         if (ret < 0)
         {
             // If there were errors, exit the loop.
-            tlog::info() << "socket_client_thread (fd=" << clientfd << "): Error occured. Exiting.";
+            tlog::info() << "socket_client_thread (fd=" << targetfd << "): Error occured. Exiting.";
             break;
         }
         // TODO: measure how much this loop takes.
@@ -201,22 +131,26 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<nesproto::FrameRequest> 
             std::string req_serialized = req.SerializeAsString();
 
             // Send request from request queue.
-            if ((ret = socket_send_blocking_lpf(clientfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
+            if ((ret = socket_send_blocking_lpf(targetfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
             {
                 continue;
             }
 
             nesproto::RenderedFrame frame;
 
-            if (!frame.ParseFromString(socket_receive_blocking_lpf(clientfd)))
+            try
+            {
+                if (!frame.ParseFromString(socket_receive_blocking_lpf(targetfd)))
+                {
+                    continue;
+                }
+            }
+            catch (const std::runtime_error &)
             {
                 continue;
             }
 
-            // Create a new renderedframe.
-            // TODO: Honor index.
-            // TODO: change w/h to unsigned int.
-            // TODO: set this to correct resolution.
+            // Create a new RenderedFrame.
             std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR32);
 
             try
@@ -227,14 +161,99 @@ void socket_client_thread(int clientfd, ThreadSafeQueue<nesproto::FrameRequest> 
             catch (const lock_timeout &)
             {
                 // It takes too much time to acquire a lock of frame_queue. Drop the frame.
-                // TODO: don't drop?
+                // BUG: If we drop the frame, the program will hang and look for the frame.
                 continue;
             }
-            frame_count++;
-            tlog::info() << "socket_client_thread (fd=" << clientfd << "): Frame has been received and placed into a queue in " << timer.elapsed().count() << " msec.";
+            tlog::info() << "socket_client_thread (fd=" << targetfd << "): Frame has been received and placed into a queue in " << timer.elapsed().count() << " msec.";
         }
     }
     // Cleanup: close the client socket.
-    close(clientfd);
-    tlog::info() << "socket_client_thread (fd=" << clientfd << "): Exiting thread.";
+    close(targetfd);
+    tlog::info() << "socket_client_thread (fd=" << targetfd << "): Exiting thread.";
+}
+
+std::thread socket_client_thread_factory(std::string renderer, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+{
+    // todo: dangerous endless loop
+    while (true)
+    {
+        std::stringstream renderer_parsed(renderer);
+
+        std::string ip;
+        std::string port_str;
+
+        std::getline(renderer_parsed, ip, ':');
+        std::getline(renderer_parsed, port_str, ':');
+
+        uint16_t port((uint16_t)std::stoi(port_str));
+
+        int fd;
+
+        struct sockaddr_in addr;
+
+        tlog::info() << "socket_client_thread_factory: Connecting to renderer at ip=" << ip << " port=" << port;
+
+        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        {
+            tlog::error() << "socket_client_thread_factory(" << renderer << "): Failed to create socket : " << std::strerror(errno) << "; Retrying.";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            continue;
+        }
+
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr(ip.c_str());
+        addr.sin_port = htons(port);
+        if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        {
+            tlog::error() << "socket_client_thread_factory(" << renderer << "): Failed to connect to : " << std::strerror(errno) << "; Retrying.";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            continue;
+        }
+        tlog::success() << "socket_client_thread_factory: Connected to " << renderer;
+
+        return std::thread(socket_client_thread, fd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+    }
+}
+
+void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+{
+    std::vector<std::pair<std::string, std::thread>> thr;
+
+    tlog::info() << "socket_main_thread: Connecting to renderers.";
+
+    for (const auto renderer : renderers)
+    {
+        std::thread _socket_client_thread = socket_client_thread_factory(renderer, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+        thr.push_back({renderer, std::move(_socket_client_thread)});
+    }
+
+    tlog::info() << "socket_main_thread: Connectd to all renderers.";
+
+    while (!shutdown_requested)
+    {
+        for (auto &th : thr)
+        {
+            if (th.second.joinable())
+            {
+                // Thread is dead although we are not finished yet, try to revive the thread.
+                // BUG: This code blocks until a connection is restored. While it's blocking, it can't monitor other servers.
+                // Join the dead thread to make it not joinable.
+                th.second.join();
+
+                tlog::info() << "socket_main_thread: Connection to " << th.first << " is dead. Trying to reconnect.";
+
+                std::thread _socket_client_thread = socket_client_thread_factory(th.first, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+
+                thr.push_back({th.first, std::move(_socket_client_thread)});
+            }
+        }
+    }
+
+    for (auto &th : thr)
+    {
+        th.second.join();
+    }
+
+    tlog::info() << "socket_main_thread: Closed all connections. Exiting thread.";
 }
