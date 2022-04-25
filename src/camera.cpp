@@ -132,7 +132,7 @@ void camera_websocket_main_thread(CameraManager &cameramgr, uint16_t bind_port, 
 
     while (!shutdown_requested)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     camera_wsserver.stop();
