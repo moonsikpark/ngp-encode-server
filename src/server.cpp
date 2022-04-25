@@ -144,10 +144,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
                 continue;
             }
 
-            // Create a new renderedframe.
-            // TODO: Honor index.
-            // TODO: change w/h to unsigned int.
-            // TODO: set this to correct resolution.
+            // Create a new RenderedFrame.
             std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR32);
 
             try
@@ -158,7 +155,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
             catch (const lock_timeout &)
             {
                 // It takes too much time to acquire a lock of frame_queue. Drop the frame.
-                // TODO: don't drop?
+                // BUG: If we drop the frame, the program will hang and look for the frame.
                 continue;
             }
             frame_count++;
