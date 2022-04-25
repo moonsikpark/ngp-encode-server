@@ -114,7 +114,6 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
 {
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
-    uint64_t frame_count = 0; // XXX HACK
     while (!shutdown_requested)
     {
         if (ret < 0)
@@ -139,7 +138,14 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
 
             nesproto::RenderedFrame frame;
 
-            if (!frame.ParseFromString(socket_receive_blocking_lpf(targetfd)))
+            try
+            {
+                if (!frame.ParseFromString(socket_receive_blocking_lpf(targetfd)))
+                {
+                    continue;
+                }
+            }
+            catch (const std::runtime_error &)
             {
                 continue;
             }
@@ -158,7 +164,6 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
                 // BUG: If we drop the frame, the program will hang and look for the frame.
                 continue;
             }
-            frame_count++;
             tlog::info() << "socket_client_thread (fd=" << targetfd << "): Frame has been received and placed into a queue in " << timer.elapsed().count() << " msec.";
         }
     }
@@ -167,13 +172,10 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Exiting thread.";
 }
 
-void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+std::thread socket_client_thread_factory(std::string renderer, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
 {
-    std::vector<std::thread> thr;
-
-    tlog::info() << "socket_main_thread: Connecting to renderers.";
-
-    for (const auto renderer : renderers)
+    // todo: dangerous endless loop
+    while (true)
     {
         std::stringstream renderer_parsed(renderer);
 
@@ -189,11 +191,13 @@ void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesp
 
         struct sockaddr_in addr;
 
-        tlog::info() << "socket_main_thread: Connecting to renderer at ip=" << ip << " port=" << port;
+        tlog::info() << "socket_client_thread_factory: Connecting to renderer at ip=" << ip << " port=" << port;
 
         if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         {
-            throw std::runtime_error{"Failed to create socket: " + std::string(std::strerror(errno))};
+            tlog::error() << "socket_client_thread_factory(" << renderer << "): Failed to create socket : " << std::strerror(errno) << "; Retrying.";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            continue;
         }
 
         memset(&addr, 0, sizeof(addr));
@@ -202,21 +206,53 @@ void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesp
         addr.sin_port = htons(port);
         if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
         {
-            throw std::runtime_error{"Failed to connect: " + std::string(std::strerror(errno))};
+            tlog::error() << "socket_client_thread_factory(" << renderer << "): Failed to connect to : " << std::strerror(errno) << "; Retrying.";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            continue;
         }
-        tlog::success() << "socket_main_thread: Connected to " << renderer;
+        tlog::success() << "socket_client_thread_factory: Connected to " << renderer;
 
-        thr.push_back(std::thread(socket_client_thread, fd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested)));
+        return std::thread(socket_client_thread, fd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+    }
+}
+
+void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+{
+    std::vector<std::pair<std::string, std::thread>> thr;
+
+    tlog::info() << "socket_main_thread: Connecting to renderers.";
+
+    for (const auto renderer : renderers)
+    {
+        std::thread _socket_client_thread = socket_client_thread_factory(renderer, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+        thr.push_back({renderer, std::move(_socket_client_thread)});
     }
 
     tlog::info() << "socket_main_thread: Connectd to all renderers.";
 
+    while (!shutdown_requested)
+    {
+        for (auto &th : thr)
+        {
+            if (th.second.joinable())
+            {
+                // Thread is dead although we are not finished yet, try to revive the thread.
+                // BUG: This code blocks until a connection is restored. While it's blocking, it can't monitor other servers.
+                // Join the dead thread to make it not joinable.
+                th.second.join();
+
+                tlog::info() << "socket_main_thread: Connection to " << th.first << " is dead. Trying to reconnect.";
+
+                std::thread _socket_client_thread = socket_client_thread_factory(th.first, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+
+                thr.push_back({th.first, std::move(_socket_client_thread)});
+            }
+        }
+    }
+
     for (auto &th : thr)
     {
-        if (th.joinable())
-        {
-            th.join();
-        }
+        th.second.join();
     }
 
     tlog::info() << "socket_main_thread: Closed all connections. Exiting thread.";

@@ -237,10 +237,7 @@ int main(int argc, char **argv)
 
         for (auto &th : threads)
         {
-            if (th.joinable())
-            {
-                th.join();
-            }
+            th.join();
         }
 
         tlog::info() << "All threads are terminated. Shutting down.";
