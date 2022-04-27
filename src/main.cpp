@@ -232,6 +232,9 @@ int main(int argc, char **argv)
         std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
         threads.push_back(std::move(_camera_websocket_main_thread));
 
+        std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index), std::ref(shutdown_requested));
+        threads.push_back(std::move(_encode_stats_thread));
+
         for (auto &th : threads)
         {
             th.join();
