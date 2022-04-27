@@ -161,3 +161,14 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
     tlog::info() << "receive_packet_thread: Shutdown requested.";
     tlog::info() << "receive_packet_thread: Exiting thread.";
 }
+
+void encode_stats_thread(std::atomic<std::uint64_t> &frame_index, std::atomic<bool> &shutdown_requested)
+{
+    uint64_t previous_index = 0;
+    while (!shutdown_requested)
+    {
+        uint64_t current_index = frame_index.load();
+        tlog::info() << "encode_stats_thread: Current frame rate: " << current_index - previous_index << " fps.";
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+}
