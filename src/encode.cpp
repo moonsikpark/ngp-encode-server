@@ -21,7 +21,6 @@ std::string averror_explain(int err)
 void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
-    uint64_t frame_index;
 
     while (!shutdown_requested)
     {
@@ -30,7 +29,7 @@ void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &
             std::unique_ptr<RenderedFrame> frame = frame_queue.pop();
             {
                 ScopedTimer timer;
-                frame_index = frame->index();
+                uint64_t frame_index = frame->index();
 
                 etctx.render_string_to_frame(frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("index=") + std::to_string(frame_index));
 
@@ -52,7 +51,7 @@ void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &
 void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm;
-    uint64_t index = 0;
+    uint64_t frame_index = 0;
     int ret;
 
     if (!(frm = av_frame_alloc()))
@@ -64,7 +63,7 @@ void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctx
     {
         try
         {
-            std::unique_ptr<RenderedFrame> processed_frame = encode_queue.pop_el(index);
+            std::unique_ptr<RenderedFrame> processed_frame = encode_queue.pop_el(frame_index);
             {
                 ScopedTimer timer;
 
@@ -88,12 +87,15 @@ void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctx
                     ret = avcodec_send_frame(ctx, frm);
                 }
                 av_frame_unref(frm);
-                tlog::info() << "send_frame_thread (index=" << index << "): sent frame to encoder in " << timer.elapsed().count() << " msec.";
-                index++;
+                tlog::info() << "send_frame_thread (index=" << frame_index << "): sent frame to encoder in " << timer.elapsed().count() << " msec.";
+                frame_index++;
             }
         }
         catch (const lock_timeout &)
         {
+            // If the frame is not located until timeout, go to next frame.
+            tlog::error() << "send_frame_thread (index=" << frame_index << "): Timeout reached while waiting for frame. Skipping.";
+            frame_index++;
             continue;
         }
     }
@@ -158,4 +160,16 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
 
     tlog::info() << "receive_packet_thread: Shutdown requested.";
     tlog::info() << "receive_packet_thread: Exiting thread.";
+}
+
+void encode_stats_thread(std::atomic<std::uint64_t> &frame_index, std::atomic<bool> &shutdown_requested)
+{
+    uint64_t previous_index = 0;
+    while (!shutdown_requested)
+    {
+        uint64_t current_index = frame_index.load();
+        tlog::info() << "encode_stats_thread: Current frame rate: " << current_index - previous_index << " fps.";
+        previous_index = current_index;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
