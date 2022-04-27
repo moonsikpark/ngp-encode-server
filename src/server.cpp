@@ -110,7 +110,7 @@ std::string socket_receive_blocking_lpf(int targetfd)
     return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
 {
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
@@ -123,19 +123,25 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
             break;
         }
 
-        nesproto::FrameRequest req = req_queue.pop();
+        nesproto::FrameRequest req;
+
+        // HACK: set this with correct res when we replace AVCodecContext.
+        req.set_index(frame_index.fetch_add(1));
+        req.set_width(veparams.width());
+        req.set_height(veparams.height());
+        req.set_allocated_camera(new nesproto::Camera(cameramgr.get_camera()));
+
+        std::string req_serialized = req.SerializeAsString();
+
+        // Send request from request queue.
+        if ((ret = socket_send_blocking_lpf(targetfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
+        {
+            continue;
+        }
+
+        nesproto::RenderedFrame frame;
         {
             ScopedTimer timer;
-
-            std::string req_serialized = req.SerializeAsString();
-
-            // Send request from request queue.
-            if ((ret = socket_send_blocking_lpf(targetfd, (uint8_t *)req_serialized.data(), req_serialized.size())) < 0)
-            {
-                continue;
-            }
-
-            nesproto::RenderedFrame frame;
 
             try
             {
@@ -148,22 +154,22 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
             {
                 continue;
             }
+            tlog::info() << "socket_client_thread (fd=" << targetfd << "): Frame has been received in " << timer.elapsed().count() << " msec.";
+        }
 
-            // Create a new RenderedFrame.
-            std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR32);
+        // Create a new RenderedFrame.
+        std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR32);
 
-            try
-            {
-                // Push the frame to the frame queue.
-                frame_queue.push(std::move(frame_o));
-            }
-            catch (const lock_timeout &)
-            {
-                // It takes too much time to acquire a lock of frame_queue. Drop the frame.
-                // BUG: If we drop the frame, the program will hang and look for the frame.
-                continue;
-            }
-            tlog::info() << "socket_client_thread (fd=" << targetfd << "): Frame has been received and placed into a queue in " << timer.elapsed().count() << " msec.";
+        try
+        {
+            // Push the frame to the frame queue.
+            frame_queue.push(std::move(frame_o));
+        }
+        catch (const lock_timeout &)
+        {
+            // It takes too much time to acquire a lock of frame_queue. Drop the frame.
+            // BUG: If we drop the frame, the program will hang and look for the frame.
+            continue;
         }
     }
     // Cleanup: close the client socket.
@@ -171,7 +177,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<nesproto::FrameRequest> 
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Exiting thread.";
 }
 
-void socket_manage_thread(std::string renderer, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
 {
     while (!shutdown_requested)
     {
@@ -210,7 +216,7 @@ void socket_manage_thread(std::string renderer, ThreadSafeQueue<nesproto::FrameR
 
         tlog::success() << "socket_client_thread_factory(" << renderer << "): Connected to " << renderer;
 
-        std::thread _socket_client_thread(socket_client_thread, fd, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested));
+        std::thread _socket_client_thread(socket_client_thread, fd, std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
 
         _socket_client_thread.join();
 
@@ -218,7 +224,7 @@ void socket_manage_thread(std::string renderer, ThreadSafeQueue<nesproto::FrameR
     }
 }
 
-void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesproto::FrameRequest> &req_queue, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<bool> &shutdown_requested)
+void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
 {
     std::vector<std::thread> threads;
 
@@ -226,7 +232,7 @@ void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<nesp
 
     for (const auto renderer : renderers)
     {
-        threads.push_back(std::thread(socket_manage_thread, renderer, std::ref(req_queue), std::ref(frame_queue), std::ref(shutdown_requested)));
+        threads.push_back(std::thread(socket_manage_thread, renderer, std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested)));
     }
 
     tlog::info() << "socket_main_thread: Connectd to all renderers.";

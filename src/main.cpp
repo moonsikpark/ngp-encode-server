@@ -209,15 +209,15 @@ int main(int argc, char **argv)
 
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
-        ThreadSafeQueue<nesproto::FrameRequest> req_frame(100);
         ThreadSafeMap<RenderedFrame> encode_queue(100);
         CameraManager cameramgr;
+        std::atomic<std::uint64_t> frame_index = 0;
 
         tlog::info() << "Done bootstrapping.";
 
         std::vector<std::thread> threads;
 
-        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(req_frame), std::ref(frame_queue), std::ref(shutdown_requested));
+        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
         threads.push_back(std::move(_socket_main_thread));
 
         std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
@@ -231,9 +231,6 @@ int main(int argc, char **argv)
 
         std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
         threads.push_back(std::move(_camera_websocket_main_thread));
-
-        std::thread _framerequest_provider_thread(framerequest_provider_thread, std::ref(veparams), std::ref(cameramgr), std::ref(req_frame), std::ref(shutdown_requested));
-        threads.push_back(std::move(_framerequest_provider_thread));
 
         for (auto &th : threads)
         {
