@@ -72,6 +72,7 @@ set(SOURCES
 	src/encode.cpp
 	src/server.cpp
 	src/camera.cpp
+	src/webrtc.cpp
 	src/main.cpp
 )
 

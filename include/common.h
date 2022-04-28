@@ -217,6 +217,7 @@ public:
 #include <camera.h>
 #include <server.h>
 #include <encode_text.h>
+#include <webrtc.h>
 #include <muxing.h>
 
 #endif // _COMMON_H_
