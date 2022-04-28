@@ -179,6 +179,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<Rendered
 
 void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
 {
+    int error_times = 0;
     while (!shutdown_requested)
     {
         std::stringstream renderer_parsed(renderer);
@@ -209,8 +210,13 @@ void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<
 
         if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
         {
-            tlog::error() << "socket_client_thread_factory(" << renderer << "): Failed to connect : " << std::strerror(errno) << "; Retrying.";
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            error_times++;
+            if (error_times > 10)
+            {
+                tlog::error() << "socket_client_thread_factory(" << renderer << "): Failed to connect : " << std::strerror(errno) << "; Retrying.";
+                error_times = 0;
+            }
             continue;
         }
 
@@ -219,6 +225,8 @@ void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<
         std::thread _socket_client_thread(socket_client_thread, fd, std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
 
         _socket_client_thread.join();
+
+        error_times = 0;
 
         tlog::error() << "socket_manage_thread (" << renderer << "): Connection is dead. Trying to reconnect.";
     }

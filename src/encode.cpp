@@ -168,8 +168,8 @@ void encode_stats_thread(std::atomic<std::uint64_t> &frame_index, std::atomic<bo
     while (!shutdown_requested)
     {
         uint64_t current_index = frame_index.load();
-        tlog::info() << "encode_stats_thread: Current frame rate: " << current_index - previous_index << " fps.";
+        tlog::info() << "encode_stats_thread: Average frame rate of the last 10 seconds: " << (current_index - previous_index) / 10 << " fps.";
         previous_index = current_index;
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::seconds(10));
     }
 }
