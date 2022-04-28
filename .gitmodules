@@ -4,3 +4,9 @@
 [submodule "dependencies/args"]
 	path = dependencies/args
 	url = https://github.com/Taywee/args.git
+[submodule "libdatachannel"]
+	path = libdatachannel
+	url = https://github.com/paullouisageneau/libdatachannel.git
+[submodule "dependencies/libdatachannel"]
+	path = dependencies/libdatachannel
+	url = https://github.com/paullouisageneau/libdatachannel.git
