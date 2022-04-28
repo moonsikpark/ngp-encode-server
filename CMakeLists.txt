@@ -30,6 +30,7 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 include_directories("dependencies")
 include_directories("dependencies/tinylogger")
 include_directories("dependencies/libdatachannel/include")
+include_directories("dependencies/json/single_include")
 
 find_path(AVCODEC_INCLUDE_DIR libavcodec/avcodec.h)
 find_library(AVCODEC_LIBRARY avcodec)
