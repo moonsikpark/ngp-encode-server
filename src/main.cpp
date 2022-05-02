@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
-        ThreadSafeMap<RenderedFrame> encode_queue(100);
+        auto encode_queue = std::make_shared<ThreadSafeMap<RenderedFrame>>(100);
         CameraManager cameramgr;
         std::atomic<std::uint64_t> frame_index = 0;
 
@@ -220,13 +220,13 @@ int main(int argc, char **argv)
         std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
         threads.push_back(std::move(_socket_main_thread));
 
-        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), encode_queue, std::ref(etctx), std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
         threads.push_back(std::move(_receive_packet_thread));
 
-        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
+        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), encode_queue, std::ref(shutdown_requested));
         threads.push_back(std::move(_send_frame_thread));
 
         std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));

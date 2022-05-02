@@ -18,6 +18,7 @@
 #include <atomic>
 #include <exception>
 #include <map>
+#include <memory>
 
 #include <tinylogger/tinylogger.h>
 
