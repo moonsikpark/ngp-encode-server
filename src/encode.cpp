@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -35,7 +35,7 @@ void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::sh
 
                 frame->convert_frame(veparams);
 
-                encode_queue.insert(frame_index, std::move(frame));
+                encode_queue->insert(frame_index, std::move(frame));
                 tlog::info() << "process_frame_thread (index=" << frame_index << "): processed frame in " << timer.elapsed().count() << " msec.";
             }
         }
@@ -48,7 +48,7 @@ void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::sh
     tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
+void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm;
     uint64_t frame_index = 0;
@@ -63,7 +63,7 @@ void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::share
     {
         try
         {
-            std::unique_ptr<RenderedFrame> processed_frame = encode_queue.pop_el(frame_index);
+            std::unique_ptr<RenderedFrame> processed_frame = encode_queue->pop_el(frame_index);
             {
                 ScopedTimer timer;
 
