@@ -110,7 +110,7 @@ std::string socket_receive_blocking_lpf(int targetfd)
     return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
+void socket_client_thread(int targetfd, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested)
 {
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
@@ -127,9 +127,9 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<Rendered
 
         // HACK: set this with correct res when we replace AVCodecContext.
         req.set_index(frame_index.fetch_add(1));
-        req.set_width(veparams.width());
-        req.set_height(veparams.height());
-        req.set_allocated_camera(new nesproto::Camera(cameramgr.get_camera()));
+        req.set_width(veparams->width());
+        req.set_height(veparams->height());
+        req.set_allocated_camera(new nesproto::Camera(cameramgr->get_camera()));
 
         std::string req_serialized = req.SerializeAsString();
 
@@ -163,7 +163,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<Rendered
         try
         {
             // Push the frame to the frame queue.
-            frame_queue.push(std::move(frame_o));
+            frame_queue->push(std::move(frame_o));
         }
         catch (const lock_timeout &)
         {
@@ -177,7 +177,7 @@ void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<Rendered
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Exiting thread.";
 }
 
-void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
+void socket_manage_thread(std::string renderer, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested)
 {
     while (!shutdown_requested)
     {
@@ -216,7 +216,7 @@ void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<
 
         tlog::success() << "socket_client_thread_factory(" << renderer << "): Connected to " << renderer;
 
-        std::thread _socket_client_thread(socket_client_thread, fd, std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
+        std::thread _socket_client_thread(socket_client_thread, fd, frame_queue, std::ref(frame_index), veparams, cameramgr, std::ref(shutdown_requested));
 
         _socket_client_thread.join();
 
@@ -224,7 +224,7 @@ void socket_manage_thread(std::string renderer, ThreadSafeQueue<std::unique_ptr<
     }
 }
 
-void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, VideoEncodingParams &veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested)
+void socket_main_thread(std::vector<std::string> renderers, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested)
 {
     std::vector<std::thread> threads;
 
@@ -232,7 +232,7 @@ void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<std:
 
     for (const auto renderer : renderers)
     {
-        threads.push_back(std::thread(socket_manage_thread, renderer, std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested)));
+        threads.push_back(std::thread(socket_manage_thread, renderer, frame_queue, std::ref(frame_index), veparams, cameramgr, std::ref(shutdown_requested)));
     }
 
     tlog::info() << "socket_main_thread: Connectd to all renderers.";

@@ -195,41 +195,40 @@ int main(int argc, char **argv)
          *       Views rendered from ngp should vary in size, optimized for speed.
          */
 
-        VideoEncodingParams veparams{get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag), AV_PIX_FMT_YUV420P};
+        auto veparams = std::make_shared<VideoEncodingParams>(get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag), AV_PIX_FMT_YUV420P);
 
         tlog::info() << "Initalizing encoder.";
-        AVCodecContextManager ctxmgr{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
+        auto ctxmgr = std::make_shared<AVCodecContextManager>(AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag));
 
         tlog::info() << "Initializing text renderer.";
-        EncodeTextContext etctx{get(font_flag)};
+        auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
 
         tlog::info() << "Initalizing muxing context.";
-
-        MuxingContext mctx{ctxmgr.get_context(), get(rtsp_server_flag)};
+        auto mctx = std::make_shared<MuxingContext>(ctxmgr->get_context(), get(rtsp_server_flag));
 
         tlog::info() << "Initalizing queue.";
-        ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
-        ThreadSafeMap<RenderedFrame> encode_queue(100);
-        CameraManager cameramgr;
+        auto frame_queue = std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
+        auto encode_queue = std::make_shared<ThreadSafeMap<RenderedFrame>>(100);
+        auto cameramgr = std::make_shared<CameraManager>();
         std::atomic<std::uint64_t> frame_index = 0;
 
         tlog::info() << "Done bootstrapping.";
 
         std::vector<std::thread> threads;
 
-        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
+        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), frame_queue, std::ref(frame_index), veparams, cameramgr, std::ref(shutdown_requested));
         threads.push_back(std::move(_socket_main_thread));
 
-        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, frame_queue, encode_queue, etctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
-        std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
+        std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, mctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_receive_packet_thread));
 
-        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
+        std::thread _send_frame_thread(send_frame_thread, veparams, ctxmgr, encode_queue, std::ref(shutdown_requested));
         threads.push_back(std::move(_send_frame_thread));
 
-        std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
+        std::thread _camera_websocket_main_thread(camera_websocket_main_thread, cameramgr, get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));
         threads.push_back(std::move(_camera_websocket_main_thread));
 
         std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index), std::ref(shutdown_requested));

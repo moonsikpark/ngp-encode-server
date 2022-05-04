@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -26,16 +26,16 @@ void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &
     {
         try
         {
-            std::unique_ptr<RenderedFrame> frame = frame_queue.pop();
+            std::unique_ptr<RenderedFrame> frame = frame_queue->pop();
             {
                 ScopedTimer timer;
                 uint64_t frame_index = frame->index();
 
-                etctx.render_string_to_frame(frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("index=") + std::to_string(frame_index));
+                etctx->render_string_to_frame(frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("index=") + std::to_string(frame_index));
 
                 frame->convert_frame(veparams);
 
-                encode_queue.insert(frame_index, std::move(frame));
+                encode_queue->insert(frame_index, std::move(frame));
                 tlog::info() << "process_frame_thread (index=" << frame_index << "): processed frame in " << timer.elapsed().count() << " msec.";
             }
         }
@@ -48,7 +48,7 @@ void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &
     tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
+void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm;
     uint64_t frame_index = 0;
@@ -63,22 +63,22 @@ void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctx
     {
         try
         {
-            std::unique_ptr<RenderedFrame> processed_frame = encode_queue.pop_el(frame_index);
+            std::unique_ptr<RenderedFrame> processed_frame = encode_queue->pop_el(frame_index);
             {
                 ScopedTimer timer;
 
-                frm->format = veparams.pix_fmt();
-                frm->width = veparams.width();
-                frm->height = veparams.height();
+                frm->format = veparams->pix_fmt();
+                frm->width = veparams->width();
+                frm->height = veparams->height();
 
-                if ((ret = av_image_alloc(frm->data, frm->linesize, veparams.width(), veparams.height(), veparams.pix_fmt(), 32)) < 0)
+                if ((ret = av_image_alloc(frm->data, frm->linesize, veparams->width(), veparams->height(), veparams->pix_fmt(), 32)) < 0)
                 {
                     throw std::runtime_error{std::string("send_frame_thread: Failed to allocate AVFrame data: ") + averror_explain(ret)};
                 }
 
-                ret = av_image_fill_pointers(frm->data, veparams.pix_fmt(), veparams.height(), processed_frame->processed_data(), processed_frame->processed_linesize());
+                ret = av_image_fill_pointers(frm->data, veparams->pix_fmt(), veparams->height(), processed_frame->processed_data(), processed_frame->processed_linesize());
                 {
-                    ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+                    ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr->get_mutex(), ctxmgr->get_context()};
                     AVCodecContext *ctx = lock.get();
 
                     // TODO: handle error codes!
@@ -107,7 +107,7 @@ void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctx
     tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
-void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested)
+void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<MuxingContext> mctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -119,7 +119,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
             AVPacket *pkt = av_packet_alloc();
             try
             {
-                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr->get_mutex(), ctxmgr->get_context()};
                 AVCodecContext *ctx = lock.get();
                 ret = avcodec_receive_packet(ctx, pkt);
             }
@@ -137,10 +137,10 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
                 continue;
             case 0:
                 // Packet pts and dts will be based on wall clock.
-                pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx.get_stream()->time_base);
+                pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
                 // TODO: add more info to print
                 tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
-                if ((ret = av_interleaved_write_frame(mctx.get_fctx(), pkt)) < 0)
+                if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pkt)) < 0)
                 {
                     tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
                 }
