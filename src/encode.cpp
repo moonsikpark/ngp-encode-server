@@ -107,7 +107,7 @@ void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::share
     tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
-void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested)
+void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<MuxingContext> mctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -137,10 +137,10 @@ void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, Muxing
                 continue;
             case 0:
                 // Packet pts and dts will be based on wall clock.
-                pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx.get_stream()->time_base);
+                pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
                 // TODO: add more info to print
                 tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
-                if ((ret = av_interleaved_write_frame(mctx.get_fctx(), pkt)) < 0)
+                if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pkt)) < 0)
                 {
                     tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
                 }

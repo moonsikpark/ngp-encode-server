@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 
         tlog::info() << "Initalizing muxing context.";
 
-        MuxingContext mctx{ctxmgr->get_context(), get(rtsp_server_flag)};
+        auto mctx = std::make_shared<MuxingContext>(ctxmgr->get_context(), get(rtsp_server_flag));
 
         tlog::info() << "Initalizing queue.";
         ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
         std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, std::ref(frame_queue), std::ref(encode_queue), etctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
-        std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, std::ref(mctx), std::ref(shutdown_requested));
+        std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, mctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_receive_packet_thread));
 
         std::thread _send_frame_thread(send_frame_thread, veparams, ctxmgr, std::ref(encode_queue), std::ref(shutdown_requested));
