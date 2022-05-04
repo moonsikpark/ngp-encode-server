@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -31,7 +31,7 @@ void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::sh
                 ScopedTimer timer;
                 uint64_t frame_index = frame->index();
 
-                etctx.render_string_to_frame(frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("index=") + std::to_string(frame_index));
+                etctx->render_string_to_frame(frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM, std::string("index=") + std::to_string(frame_index));
 
                 frame->convert_frame(veparams);
 

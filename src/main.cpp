@@ -201,7 +201,7 @@ int main(int argc, char **argv)
         auto ctxmgr = std::make_shared<AVCodecContextManager>(AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag));
 
         tlog::info() << "Initializing text renderer.";
-        EncodeTextContext etctx{get(font_flag)};
+        auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
 
         tlog::info() << "Initalizing muxing context.";
 
@@ -220,7 +220,7 @@ int main(int argc, char **argv)
         std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), veparams, std::ref(cameramgr), std::ref(shutdown_requested));
         threads.push_back(std::move(_socket_main_thread));
 
-        std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, std::ref(frame_queue), std::ref(encode_queue), etctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
         std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, std::ref(mctx), std::ref(shutdown_requested));
