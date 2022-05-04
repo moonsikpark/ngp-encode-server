@@ -114,44 +114,39 @@ void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::s
     while (!shutdown_requested)
     {
         {
+            // BUG: When AVERROR(EAGAIN) happens, the packet manager will re-allcoate a packet which is a waste of resources.
             ScopedTimer timer;
-            // TODO: Gracefully create and free AVPackets.
-            AVPacket *pkt = av_packet_alloc();
+            AVPacketManager pktmgr;
             try
             {
-                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr->get_mutex(), ctxmgr->get_context()};
-                AVCodecContext *ctx = lock.get();
-                ret = avcodec_receive_packet(ctx, pkt);
+                ResourceLock<std::mutex, AVCodecContext> avcodeccontextlock{ctxmgr->get_mutex(), ctxmgr->get_context()};
+                ret = avcodec_receive_packet(avcodeccontextlock.get(), pktmgr.get());
             }
             catch (const lock_timeout &)
             {
-                av_packet_free(&pkt);
-                continue;
+                tlog::info() << "receive_packet_thread: lock_timeout while acquiring resource lock for AVCodecContext.";
+                break;
             }
 
             switch (ret)
             {
             case AVERROR(EAGAIN): // output is not available in the current state - user must try to send input
-
-                av_packet_free(&pkt);
-                continue;
+                break;
             case 0:
                 // Packet pts and dts will be based on wall clock.
-                pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
+                pktmgr.get()->pts = pktmgr.get()->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
                 // TODO: add more info to print
-                tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
-                if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pkt)) < 0)
+                tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; pts=" << pktmgr.get()->pts << " dts=" << pktmgr.get()->dts << " size=" << pktmgr.get()->size;
+                if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pktmgr.get())) < 0)
                 {
                     tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
                 }
-                av_packet_free(&pkt);
                 break;
             case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
             default:
                 tlog::error() << "receive_packet_thread: Failed to receive packet: " << averror_explain(ret);
             case AVERROR_EOF: // the encoder has been fully flushed, and there will be no more output packets
                 shutdown_requested = true;
-                av_packet_free(&pkt);
                 break;
             }
         }

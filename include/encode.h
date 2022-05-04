@@ -213,6 +213,30 @@ public:
     }
 };
 
+class AVPacketManager
+{
+private:
+    AVPacket *_pkt;
+
+public:
+    AVPacketManager()
+    {
+        tlog::info() << "AVPacketManager ctor";
+        this->_pkt = av_packet_alloc();
+    }
+
+    AVPacket *get()
+    {
+        return this->_pkt;
+    }
+
+    ~AVPacketManager()
+    {
+        tlog::info() << "AVPacketManager dtor";
+        av_packet_free(&this->_pkt);
+    }
+};
+
 #include <muxing.h>
 #include <encode_text.h>
 void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested);
