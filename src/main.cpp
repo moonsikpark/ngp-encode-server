@@ -208,7 +208,7 @@ int main(int argc, char **argv)
         auto mctx = std::make_shared<MuxingContext>(ctxmgr->get_context(), get(rtsp_server_flag));
 
         tlog::info() << "Initalizing queue.";
-        ThreadSafeQueue<std::unique_ptr<RenderedFrame>> frame_queue(100);
+        auto frame_queue = std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
         ThreadSafeMap<RenderedFrame> encode_queue(100);
         auto cameramgr = std::make_shared<CameraManager>();
         std::atomic<std::uint64_t> frame_index = 0;
@@ -217,10 +217,10 @@ int main(int argc, char **argv)
 
         std::vector<std::thread> threads;
 
-        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), veparams, cameramgr, std::ref(shutdown_requested));
+        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), frame_queue, std::ref(frame_index), veparams, cameramgr, std::ref(shutdown_requested));
         threads.push_back(std::move(_socket_main_thread));
 
-        std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, std::ref(frame_queue), std::ref(encode_queue), etctx, std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, frame_queue, std::ref(encode_queue), etctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
         std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, mctx, std::ref(shutdown_requested));

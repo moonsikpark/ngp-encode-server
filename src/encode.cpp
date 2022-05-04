@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -26,7 +26,7 @@ void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::sh
     {
         try
         {
-            std::unique_ptr<RenderedFrame> frame = frame_queue.pop();
+            std::unique_ptr<RenderedFrame> frame = frame_queue->pop();
             {
                 ScopedTimer timer;
                 uint64_t frame_index = frame->index();
