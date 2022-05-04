@@ -13,7 +13,7 @@
 #include <thread>
 #include <sys/un.h>
 
-void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested);
-void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, CameraManager &cameramgr, std::atomic<bool> &shutdown_requested);
+void socket_main_thread(std::vector<std::string> renderers, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested);
+void socket_client_thread(int targetfd, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested);
 
 #endif // _SERVER_H_
