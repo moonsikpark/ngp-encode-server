@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -48,7 +48,7 @@ void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodec
     tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
+void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm;
     uint64_t frame_index = 0;
@@ -78,7 +78,7 @@ void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodecCon
 
                 ret = av_image_fill_pointers(frm->data, veparams->pix_fmt(), veparams->height(), processed_frame->processed_data(), processed_frame->processed_linesize());
                 {
-                    ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+                    ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr->get_mutex(), ctxmgr->get_context()};
                     AVCodecContext *ctx = lock.get();
 
                     // TODO: handle error codes!
@@ -107,7 +107,7 @@ void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodecCon
     tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
-void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested)
+void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -119,7 +119,7 @@ void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, s
             AVPacket *pkt = av_packet_alloc();
             try
             {
-                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
+                ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr->get_mutex(), ctxmgr->get_context()};
                 AVCodecContext *ctx = lock.get();
                 ret = avcodec_receive_packet(ctx, pkt);
             }
