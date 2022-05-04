@@ -45,6 +45,6 @@ public:
 };
 
 void camera_websocket_main_thread(CameraManager &cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested);
-void framerequest_provider_thread(VideoEncodingParams &veparams, CameraManager &cameramgr, ThreadSafeQueue<nesproto::FrameRequest> &request_queue, std::atomic<bool> &shutdown_requested);
+void framerequest_provider_thread(std::shared_ptr<VideoEncodingParams> veparams, CameraManager &cameramgr, ThreadSafeQueue<nesproto::FrameRequest> &request_queue, std::atomic<bool> &shutdown_requested);
 
 #endif // _CAMERA_H_

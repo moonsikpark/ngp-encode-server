@@ -195,7 +195,7 @@ int main(int argc, char **argv)
          *       Views rendered from ngp should vary in size, optimized for speed.
          */
 
-        VideoEncodingParams veparams{get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag), AV_PIX_FMT_YUV420P};
+        auto veparams = std::make_shared<VideoEncodingParams>(get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag), AV_PIX_FMT_YUV420P);
 
         tlog::info() << "Initalizing encoder.";
         AVCodecContextManager ctxmgr{AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag), get(encode_tune_flag), get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag)};
@@ -217,16 +217,16 @@ int main(int argc, char **argv)
 
         std::vector<std::thread> threads;
 
-        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), std::ref(veparams), std::ref(cameramgr), std::ref(shutdown_requested));
+        std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag), std::ref(frame_queue), std::ref(frame_index), veparams, std::ref(cameramgr), std::ref(shutdown_requested));
         threads.push_back(std::move(_socket_main_thread));
 
-        std::thread _process_frame_thread(process_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
+        std::thread _process_frame_thread(process_frame_thread, veparams, std::ref(ctxmgr), std::ref(frame_queue), std::ref(encode_queue), std::ref(etctx), std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
         std::thread _receive_packet_thread(receive_packet_thread, std::ref(ctxmgr), std::ref(mctx), std::ref(shutdown_requested));
         threads.push_back(std::move(_receive_packet_thread));
 
-        std::thread _send_frame_thread(send_frame_thread, std::ref(veparams), std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
+        std::thread _send_frame_thread(send_frame_thread, veparams, std::ref(ctxmgr), std::ref(encode_queue), std::ref(shutdown_requested));
         threads.push_back(std::move(_send_frame_thread));
 
         std::thread _camera_websocket_main_thread(camera_websocket_main_thread, std::ref(cameramgr), get(wsserver_bind_port), get(wsserver_cert_location), get(wsserver_dhparam_location), std::ref(shutdown_requested));

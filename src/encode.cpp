@@ -18,7 +18,7 @@ std::string averror_explain(int err)
     return std::string(errbuf);
 }
 
-void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue, ThreadSafeMap<RenderedFrame> &encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
@@ -48,7 +48,7 @@ void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &
     tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
+void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, AVCodecContextManager &ctxmgr, ThreadSafeMap<RenderedFrame> &encode_queue, std::atomic<bool> &shutdown_requested)
 {
     AVFrame *frm;
     uint64_t frame_index = 0;
@@ -67,16 +67,16 @@ void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctx
             {
                 ScopedTimer timer;
 
-                frm->format = veparams.pix_fmt();
-                frm->width = veparams.width();
-                frm->height = veparams.height();
+                frm->format = veparams->pix_fmt();
+                frm->width = veparams->width();
+                frm->height = veparams->height();
 
-                if ((ret = av_image_alloc(frm->data, frm->linesize, veparams.width(), veparams.height(), veparams.pix_fmt(), 32)) < 0)
+                if ((ret = av_image_alloc(frm->data, frm->linesize, veparams->width(), veparams->height(), veparams->pix_fmt(), 32)) < 0)
                 {
                     throw std::runtime_error{std::string("send_frame_thread: Failed to allocate AVFrame data: ") + averror_explain(ret)};
                 }
 
-                ret = av_image_fill_pointers(frm->data, veparams.pix_fmt(), veparams.height(), processed_frame->processed_data(), processed_frame->processed_linesize());
+                ret = av_image_fill_pointers(frm->data, veparams->pix_fmt(), veparams->height(), processed_frame->processed_data(), processed_frame->processed_linesize());
                 {
                     ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr.get_mutex(), ctxmgr.get_context()};
                     AVCodecContext *ctx = lock.get();
