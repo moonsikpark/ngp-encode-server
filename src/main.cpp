@@ -235,6 +235,9 @@ int main(int argc, char **argv)
         std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index), std::ref(shutdown_requested));
         threads.push_back(std::move(_encode_stats_thread));
 
+        std::thread _webrtc_main_thread(webrtc_main_thread, encode_queue, std::ref(shutdown_requested));
+        threads.push_back(std::move(_webrtc_main_thread));
+
         for (auto &th : threads)
         {
             th.join();

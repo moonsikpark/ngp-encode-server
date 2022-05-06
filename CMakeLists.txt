@@ -75,6 +75,14 @@ set(SOURCES
 	src/camera.cpp
 	src/webrtc.cpp
 	src/main.cpp
+	src/streamer/helpers.cpp
+	src/streamer/dispatchqueue.cpp
+	src/streamer/fileparser.cpp
+	src/streamer/h264fileparser.cpp
+	src/streamer/ffmpegstreamsource.cpp
+	src/streamer/main.cpp
+	src/streamer/opusfileparser.cpp
+	src/streamer/stream.cpp
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
