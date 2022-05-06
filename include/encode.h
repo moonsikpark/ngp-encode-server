@@ -221,7 +221,6 @@ private:
 public:
     AVPacketManager()
     {
-        tlog::info() << "AVPacketManager ctor";
         this->_pkt = av_packet_alloc();
     }
 
@@ -232,7 +231,6 @@ public:
 
     ~AVPacketManager()
     {
-        tlog::info() << "AVPacketManager dtor";
         av_packet_free(&this->_pkt);
     }
 };

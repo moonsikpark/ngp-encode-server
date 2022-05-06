@@ -107,48 +107,61 @@ void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::share
     tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
-void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<MuxingContext> mctx, std::atomic<bool> &shutdown_requested)
+int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr, AVPacket *pkt, std::shared_ptr<MuxingContext> mctx, std::atomic<bool> &shutdown_requested)
 {
     int ret;
 
     while (!shutdown_requested)
     {
         {
-            // BUG: When AVERROR(EAGAIN) happens, the packet manager will re-allcoate a packet which is a waste of resources.
-            ScopedTimer timer;
-            AVPacketManager pktmgr;
-            try
-            {
-                ResourceLock<std::mutex, AVCodecContext> avcodeccontextlock{ctxmgr->get_mutex(), ctxmgr->get_context()};
-                ret = avcodec_receive_packet(avcodeccontextlock.get(), pktmgr.get());
-            }
-            catch (const lock_timeout &)
-            {
-                tlog::info() << "receive_packet_thread: lock_timeout while acquiring resource lock for AVCodecContext.";
-                break;
-            }
+            // The lock must be in this scope so that it would be unlocked right after avcodec_receive_packet() returns.
+            ResourceLock<std::mutex, AVCodecContext> avcodeccontextlock{ctxmgr->get_mutex(), ctxmgr->get_context()};
+            ret = avcodec_receive_packet(avcodeccontextlock.get(), pkt);
+        }
 
-            switch (ret)
+        switch (ret)
+        {
+        case AVERROR(EAGAIN): // output is not available in the current state - user must try to send input
+            // We must sleep here so that other threads can acquire AVCodecContext.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            break;
+        case 0:
+            // Packet pts and dts will be based on wall clock.
+            pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
+            // TODO: add more info to print
+            tlog::info() << "receive_packet_handler: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
+            if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pkt)) < 0)
             {
-            case AVERROR(EAGAIN): // output is not available in the current state - user must try to send input
-                break;
-            case 0:
-                // Packet pts and dts will be based on wall clock.
-                pktmgr.get()->pts = pktmgr.get()->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
-                // TODO: add more info to print
-                tlog::info() << "receive_packet_thread: Received packet in " << timer.elapsed().count() << " msec; pts=" << pktmgr.get()->pts << " dts=" << pktmgr.get()->dts << " size=" << pktmgr.get()->size;
-                if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pktmgr.get())) < 0)
-                {
-                    tlog::error() << "receive_packet_thread: Failed to write frame to muxing context: " << averror_explain(ret);
-                }
-                break;
-            case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
-            default:
-                tlog::error() << "receive_packet_thread: Failed to receive packet: " << averror_explain(ret);
-            case AVERROR_EOF: // the encoder has been fully flushed, and there will be no more output packets
-                shutdown_requested = true;
-                break;
+                tlog::error() << "receive_packet_handler: Failed to write frame to muxing context: " << averror_explain(ret);
             }
+            return 0;
+        case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
+        default:
+            tlog::error() << "receive_packet_handler: Failed to receive packet: " << averror_explain(ret);
+        case AVERROR_EOF: // the encoder has been fully flushed, and there will be no more output packets
+            return -1;
+        }
+    }
+
+    return -1;
+}
+
+void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<MuxingContext> mctx, std::atomic<bool> &shutdown_requested)
+{
+    while (!shutdown_requested)
+    {
+        AVPacketManager pktmgr;
+        try
+        {
+            if (receive_packet_handler(ctxmgr, pktmgr.get(), mctx, std::ref(shutdown_requested)) < 0)
+            {
+                shutdown_requested = true;
+            }
+        }
+        catch (const lock_timeout &)
+        {
+            tlog::info() << "receive_packet_thread: lock_timeout while acquiring resource lock for AVCodecContext.";
+            break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
