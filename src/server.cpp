@@ -112,6 +112,7 @@ std::string socket_receive_blocking_lpf(int targetfd)
 
 void socket_client_thread(int targetfd, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name(std::string("socket_client=") + std::to_string(targetfd));
     int ret = 0;
     tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
     while (!shutdown_requested)
@@ -179,6 +180,7 @@ void socket_client_thread(int targetfd, std::shared_ptr<ThreadSafeQueue<std::uni
 
 void socket_manage_thread(std::string renderer, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name(std::string("socket_manage=") + renderer);
     int error_times = 0;
     while (!shutdown_requested)
     {
@@ -234,6 +236,7 @@ void socket_manage_thread(std::string renderer, std::shared_ptr<ThreadSafeQueue<
 
 void socket_main_thread(std::vector<std::string> renderers, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::atomic<std::uint64_t> &frame_index, std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<CameraManager> cameramgr, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name("socket_main");
     std::vector<std::thread> threads;
 
     tlog::info() << "socket_main_thread: Connecting to renderers.";

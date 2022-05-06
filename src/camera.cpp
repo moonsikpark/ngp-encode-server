@@ -107,6 +107,7 @@ context_ptr on_tls_init(tls_mode mode, websocketpp::connection_hdl hdl, std::str
 
 void camera_websocket_loop_thread(std::shared_ptr<CameraManager> cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, server &server)
 {
+    set_userspace_thread_name("camera_websocket_loop");
     server.init_asio();
 
     server.set_message_handler(bind(&on_message, &server, ::_1, ::_2, cameramgr));
@@ -125,6 +126,7 @@ void camera_websocket_loop_thread(std::shared_ptr<CameraManager> cameramgr, uint
 
 void camera_websocket_main_thread(std::shared_ptr<CameraManager> cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name("camera_websocket_main");
     server camera_wsserver;
     camera_wsserver.clear_access_channels(alevel::all);
 
