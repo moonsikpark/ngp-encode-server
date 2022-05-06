@@ -19,6 +19,8 @@
 #include <exception>
 #include <map>
 
+#include <sys/prctl.h>
+
 #include <tinylogger/tinylogger.h>
 
 #include <proto/nes.pb.h>
@@ -30,6 +32,8 @@ extern "C"
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
 }
+
+void set_userspace_thread_name(std::string name);
 
 class lock_timeout : public std::exception
 {

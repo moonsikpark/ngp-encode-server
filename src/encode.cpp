@@ -20,6 +20,7 @@ std::string averror_explain(int err)
 
 void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name("process_frame");
     int ret;
 
     while (!shutdown_requested)
@@ -50,6 +51,7 @@ void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::sh
 
 void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name("send_frame");
     AVFrame *frm;
     uint64_t frame_index = 0;
     int ret;
@@ -164,6 +166,7 @@ void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::s
 
 void encode_stats_thread(std::atomic<std::uint64_t> &frame_index, std::atomic<bool> &shutdown_requested)
 {
+    set_userspace_thread_name("encode_stats");
     uint64_t previous_index = 0;
     while (!shutdown_requested)
     {
