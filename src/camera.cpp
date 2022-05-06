@@ -25,13 +25,13 @@ using websocketpp::log::alevel;
 typedef websocketpp::config::asio::message_type::ptr message_ptr;
 typedef websocketpp::lib::shared_ptr<websocketpp::lib::asio::ssl::context> context_ptr;
 
-void on_message(server *s, websocketpp::connection_hdl hdl, message_ptr msg, CameraManager &cameramgr)
+void on_message(server *s, websocketpp::connection_hdl hdl, message_ptr msg, std::shared_ptr<CameraManager> cameramgr)
 {
     nesproto::Camera cam;
 
     if (cam.ParseFromString(msg->get_raw_payload()))
     {
-        cameramgr.set_camera(cam);
+        cameramgr->set_camera(cam);
         s->send(hdl, "OK", websocketpp::frame::opcode::text);
         tlog::success() << "camera_websocket_loop_thread: Got Camera matrix.";
     }
@@ -105,11 +105,11 @@ context_ptr on_tls_init(tls_mode mode, websocketpp::connection_hdl hdl, std::str
     return ctx;
 }
 
-void camera_websocket_loop_thread(CameraManager &cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, server &server)
+void camera_websocket_loop_thread(std::shared_ptr<CameraManager> cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, server &server)
 {
     server.init_asio();
 
-    server.set_message_handler(bind(&on_message, &server, ::_1, ::_2, std::ref(cameramgr)));
+    server.set_message_handler(bind(&on_message, &server, ::_1, ::_2, cameramgr));
     server.set_http_handler(bind(&on_http, &server, ::_1));
     server.set_tls_init_handler(bind(&on_tls_init, MOZILLA_INTERMEDIATE, ::_1, server_cert_location, dhparam_location));
 
@@ -123,12 +123,12 @@ void camera_websocket_loop_thread(CameraManager &cameramgr, uint16_t bind_port, 
     server.run();
 }
 
-void camera_websocket_main_thread(CameraManager &cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested)
+void camera_websocket_main_thread(std::shared_ptr<CameraManager> cameramgr, uint16_t bind_port, std::string server_cert_location, std::string dhparam_location, std::atomic<bool> &shutdown_requested)
 {
     server camera_wsserver;
     camera_wsserver.clear_access_channels(alevel::all);
 
-    std::thread _camera_websocket_loop_thread(camera_websocket_loop_thread, std::ref(cameramgr), bind_port, server_cert_location, dhparam_location, std::ref(camera_wsserver));
+    std::thread _camera_websocket_loop_thread(camera_websocket_loop_thread, cameramgr, bind_port, server_cert_location, dhparam_location, std::ref(camera_wsserver));
 
     while (!shutdown_requested)
     {

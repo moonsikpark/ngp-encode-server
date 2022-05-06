@@ -47,7 +47,7 @@ unordered_map<string, shared_ptr<Client>> clients{};
 /// @returns Client
 shared_ptr<Client> createPeerConnection(const Configuration &config,
                                         weak_ptr<WebSocket> wws,
-                                        string id, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue);
+                                        string id);
 
 /// Creates stream
 /// @param h264Samples Directory with H264 samples
@@ -59,10 +59,10 @@ shared_ptr<Stream> createStream(const string h264Samples, const unsigned fps, co
 /// Add client to stream
 /// @param client Client
 /// @param adding_video True if adding video
-void addToStream(shared_ptr<Client> client, bool isAddingVideo, shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue);
+void addToStream(shared_ptr<Client> client, bool isAddingVideo);
 
 /// Start stream
-void startStream(shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue);
+void startStream();
 
 /// Main dispatch queue
 DispatchQueue MainThread("Main");
@@ -84,7 +84,7 @@ uint16_t port = defaultPort;
 /// @param message Incommint message
 /// @param config Configuration
 /// @param ws Websocket
-void wsOnMessage(json message, Configuration config, shared_ptr<WebSocket> ws, shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue)
+void wsOnMessage(json message, Configuration config, shared_ptr<WebSocket> ws)
 {
     auto it = message.find("id");
     if (it == message.end())
@@ -97,7 +97,7 @@ void wsOnMessage(json message, Configuration config, shared_ptr<WebSocket> ws, s
 
     if (type == "streamRequest")
     {
-        shared_ptr<Client> c = createPeerConnection(config, make_weak_ptr(ws), id, encode_queue);
+        shared_ptr<Client> c = createPeerConnection(config, make_weak_ptr(ws), id);
         clients.emplace(id, c);
     }
     else if (type == "answer")
@@ -113,7 +113,7 @@ void wsOnMessage(json message, Configuration config, shared_ptr<WebSocket> ws, s
     }
 }
 
-int stmain(std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atomic<bool> &shutdown_requested)
+int stmain(std::atomic<bool> &shutdown_requested)
 {
     try
     {
@@ -144,8 +144,8 @@ int stmain(std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atom
             return;
 
         json message = json::parse(get<string>(data));
-        MainThread.dispatch([message, config, ws, encode_queue]() {
-            wsOnMessage(message, config, ws, encode_queue);
+        MainThread.dispatch([message, config, ws]() {
+            wsOnMessage(message, config, ws);
         }); });
 
         const string url = "ws://" + ip_address + ":" + to_string(port) + "/" + localId;
@@ -228,7 +228,7 @@ shared_ptr<ClientTrackData> addAudio(const shared_ptr<PeerConnection> pc, const 
 // Create and setup a PeerConnection
 shared_ptr<Client> createPeerConnection(const Configuration &config,
                                         weak_ptr<WebSocket> wws,
-                                        string id, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue)
+                                        string id)
 {
     auto pc = make_shared<PeerConnection>(config);
     auto client = make_shared<Client>(pc);
@@ -267,20 +267,20 @@ shared_ptr<Client> createPeerConnection(const Configuration &config,
             }
         });
 
-    client->video = addVideo(pc, 102, 1, "video-stream", "stream1", [id, wc = make_weak_ptr(client), encode_queue]()
+    client->video = addVideo(pc, 102, 1, "video-stream", "stream1", [id, wc = make_weak_ptr(client)]()
                              {
-        MainThread.dispatch([wc, encode_queue]() {
+        MainThread.dispatch([wc]() {
             if (auto c = wc.lock()) {
-                addToStream(c, true, encode_queue);
+                addToStream(c, true);
             }
         });
         cout << "Video from " << id << " opened" << endl; });
 
-    client->audio = addAudio(pc, 111, 2, "audio-stream", "stream1", [id, wc = make_weak_ptr(client), encode_queue]()
+    client->audio = addAudio(pc, 111, 2, "audio-stream", "stream1", [id, wc = make_weak_ptr(client)]()
                              {
-        MainThread.dispatch([wc, encode_queue]() {
+        MainThread.dispatch([wc]() {
             if (auto c = wc.lock()) {
-                addToStream(c, true, encode_queue);
+                addToStream(c, true);
             }
         });
         cout << "Audio from " << id << " opened" << endl; });
@@ -305,10 +305,10 @@ shared_ptr<Client> createPeerConnection(const Configuration &config,
 };
 
 /// Create stream
-shared_ptr<Stream> createStream(const string h264Samples, const unsigned fps, const string opusSamples, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue)
+shared_ptr<Stream> createStream(const string h264Samples, const unsigned fps, const string opusSamples)
 {
     // video source
-    auto video = make_shared<FFMpegStreamSource>(encode_queue);
+    auto video = make_shared<FFMpegStreamSource>();
     // audio source
     auto audio = make_shared<OPUSFileParser>(opusSamples, true);
 
@@ -377,7 +377,7 @@ shared_ptr<Stream> createStream(const string h264Samples, const unsigned fps, co
 }
 
 /// Start stream
-void startStream(shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue)
+void startStream()
 {
     shared_ptr<Stream> stream;
     if (avStream.has_value())
@@ -391,7 +391,7 @@ void startStream(shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue)
     }
     else
     {
-        stream = createStream(h264SamplesDirectory, 30, opusSamplesDirectory, encode_queue);
+        stream = createStream(h264SamplesDirectory, 30, opusSamplesDirectory);
         avStream = stream;
     }
     stream->start();
@@ -421,7 +421,7 @@ void sendInitialNalus(shared_ptr<Stream> stream, shared_ptr<ClientTrackData> vid
 /// Add client to stream
 /// @param client Client
 /// @param adding_video True if adding video
-void addToStream(shared_ptr<Client> client, bool isAddingVideo, shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue)
+void addToStream(shared_ptr<Client> client, bool isAddingVideo)
 {
     if (client->getState() == Client::State::Waiting)
     {
@@ -456,6 +456,6 @@ void addToStream(shared_ptr<Client> client, bool isAddingVideo, shared_ptr<Threa
     }
     if (client->getState() == Client::State::Ready)
     {
-        startStream(encode_queue);
+        startStream();
     }
 }

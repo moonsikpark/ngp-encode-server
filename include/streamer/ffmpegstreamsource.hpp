@@ -37,7 +37,7 @@ public:
 
     virtual void start();
     virtual void stop();
-    FFMpegStreamSource(/* ThreadSafeMap<RenderedFrame> *frame_map */);
+    FFMpegStreamSource();
     virtual void loadNextSample();
     std::vector<std::byte> initialNALUS();
 };

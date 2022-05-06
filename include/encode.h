@@ -54,7 +54,7 @@ public:
         return false;
     }
 
-    void convert_frame(VideoEncodingParams &veparams)
+    void convert_frame(std::shared_ptr<VideoEncodingParams> veparams)
     {
         if (this->_processed)
         {
@@ -66,9 +66,9 @@ public:
             this->width(),
             this->height(),
             this->_pix_fmt,
-            veparams.width(),
-            veparams.height(),
-            veparams.pix_fmt(),
+            veparams->width(),
+            veparams->height(),
+            veparams->pix_fmt(),
             0,
             0,
             0,
@@ -79,7 +79,7 @@ public:
             throw std::runtime_error{"Failed to allocate sws_context."};
         }
 
-        if (av_image_alloc(this->_processed_data, this->_processed_linesize, veparams.width(), veparams.height(), veparams.pix_fmt(), 32) < 0)
+        if (av_image_alloc(this->_processed_data, this->_processed_linesize, veparams->width(), veparams->height(), veparams->pix_fmt(), 32) < 0)
         {
             tlog::error("Failed to allocate frame data.");
         }
@@ -213,11 +213,33 @@ public:
     }
 };
 
+class AVPacketManager
+{
+private:
+    AVPacket *_pkt;
+
+public:
+    AVPacketManager()
+    {
+        this->_pkt = av_packet_alloc();
+    }
+
+    AVPacket *get()
+    {
+        return this->_pkt;
+    }
+
+    ~AVPacketManager()
+    {
+        av_packet_free(&this->_pkt);
+    }
+};
+
 #include <muxing.h>
 #include <encode_text.h>
-void process_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, ThreadSafeQueue<std::unique_ptr<RenderedFrame>> &frame_queue,  std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, EncodeTextContext &etctx, std::atomic<bool> &shutdown_requested);
-void send_frame_thread(VideoEncodingParams &veparams, AVCodecContextManager &ctxmgr, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atomic<bool> &shutdown_requested);
-void receive_packet_thread(AVCodecContextManager &ctxmgr, MuxingContext &mctx, std::atomic<bool> &shutdown_requested);
+void process_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>> frame_queue, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::shared_ptr<EncodeTextContext> etctx, std::atomic<bool> &shutdown_requested);
+void send_frame_thread(std::shared_ptr<VideoEncodingParams> veparams, std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue, std::atomic<bool> &shutdown_requested);
+void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::shared_ptr<MuxingContext> mctx, std::atomic<bool> &shutdown_requested);
 void encode_stats_thread(std::atomic<std::uint64_t> &frame_index, std::atomic<bool> &shutdown_requested);
 
 #endif // _ENCODE_H_
