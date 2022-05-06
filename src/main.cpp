@@ -22,8 +22,14 @@ void signal_handler(int)
     shutdown_requested = true;
 }
 
+void set_userspace_thread_name(std::string name)
+{
+    prctl(PR_SET_NAME, name.c_str());
+}
+
 int main(int argc, char **argv)
 {
+    set_userspace_thread_name("main");
     GOOGLE_PROTOBUF_VERIFY_VERSION;
     // TODO: Use POSIX standard sigaction(2)
     signal(SIGINT, signal_handler);
