@@ -10,6 +10,6 @@
 
 #include <common.h>
 
-void webrtc_main_thread(std::atomic<bool> &shutdown_requested);
+void webrtc_main_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shutdown_requested);
 
 #endif // _WEBRTC_H_

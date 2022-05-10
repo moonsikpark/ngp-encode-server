@@ -21,9 +21,9 @@
 
 using namespace std;
 
-FFMpegStreamSource::FFMpegStreamSource(/* ThreadSafeMap<RenderedFrame> *frame_map */) : sampleDuration_us(1000 * 1000 / 30), StreamSource()
+FFMpegStreamSource::FFMpegStreamSource(std::shared_ptr<AVCodecContextManager> ctxmgr) : ctxmgr(ctxmgr), sampleDuration_us(1000 * 1000 / 30), StreamSource()
 {
-    // this->frame_map = frame_map;
+    tlog::info() << "FFMpegStreamSource: ctor";
 }
 
 void FFMpegStreamSource::start()
@@ -39,28 +39,40 @@ void FFMpegStreamSource::stop()
 
 void FFMpegStreamSource::loadNextSample()
 {
-    /*
-    string frame_id = to_string(++counter);
-
-    string url = directory + "/sample-" + frame_id + extension;
-    ifstream source(url, ios_base::binary);
-    if (!source)
+    tlog::info() << "FFMpegStreamSource::loadNextSample(): enter";
+    int ret;
+    AVPacketManager pktmgr;
+    vector<uint8_t> contents;
+    while (true)
     {
-        if (loop && counter > 0)
+        tlog::info() << "FFMpegStreamSource::loadNextSample(): avcodec_receive_packet";
+        AVPacket *pkt = pktmgr.get();
         {
-            loopTimestampOffset = sampleTime_us;
-            counter = -1;
-            loadNextSample();
+            // The lock must be in this scope so that it would be unlocked right after avcodec_receive_packet() returns.
+            ResourceLock<std::mutex, AVCodecContext> avcodeccontextlock{ctxmgr->get_mutex(), ctxmgr->get_context()};
+            ret = avcodec_receive_packet(avcodeccontextlock.get(), pkt);
+        }
+        switch (ret)
+        {
+        case AVERROR(EAGAIN): // output is not available in the current state - user must try to send input
+            // We must sleep here so that other threads can acquire AVCodecContext.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            break;
+        case 0:
+            tlog::info() << "FFMpegStreamSource::loadNextSample(): Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
+            contents.resize(pkt->size);
+            memcpy(contents.data(), pkt->data, pkt->size);
+            sample = *reinterpret_cast<vector<byte> *>(&memcpy);
+            sampleTime_us += sampleDuration_us;
+            return;
+        case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
+        default:
+            tlog::error() << "FFMpegStreamSource::loadNextSample(): Failed to receive packet: " << averror_explain(ret);
+        case AVERROR_EOF: // the encoder has been fully flushed, and there will be no more output packets
+            throw std::runtime_error("AVERROR(EINVAL) or AVERROR_EOF");
             return;
         }
-        sample = {};
-        return;
     }
-
-    vector<uint8_t> fileContents((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
-    sample = *reinterpret_cast<vector<byte> *>(&fileContents);
-    sampleTime_us += sampleDuration_us;
-    */
 }
 
 vector<byte> FFMpegStreamSource::initialNALUS()

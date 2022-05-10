@@ -19,6 +19,6 @@
 #ifndef main_hpp
 #define main_hpp
 
-int stmain(std::atomic<bool> &shutdown_requested);
+int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shutdown_requested);
 
 #endif /* main_hpp */

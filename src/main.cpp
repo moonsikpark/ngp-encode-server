@@ -228,8 +228,8 @@ int main(int argc, char **argv)
         std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr, frame_queue, encode_queue, etctx, std::ref(shutdown_requested));
         threads.push_back(std::move(_process_frame_thread));
 
-        std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, mctx, std::ref(shutdown_requested));
-        threads.push_back(std::move(_receive_packet_thread));
+        // std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, mctx, std::ref(shutdown_requested));
+        // threads.push_back(std::move(_receive_packet_thread));
 
         std::thread _send_frame_thread(send_frame_thread, veparams, ctxmgr, encode_queue, std::ref(shutdown_requested));
         threads.push_back(std::move(_send_frame_thread));
@@ -240,7 +240,7 @@ int main(int argc, char **argv)
         std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index), std::ref(shutdown_requested));
         threads.push_back(std::move(_encode_stats_thread));
 
-        std::thread _webrtc_main_thread(webrtc_main_thread, std::ref(shutdown_requested));
+        std::thread _webrtc_main_thread(webrtc_main_thread, ctxmgr, std::ref(shutdown_requested));
         threads.push_back(std::move(_webrtc_main_thread));
 
         for (auto &th : threads)

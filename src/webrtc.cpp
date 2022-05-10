@@ -11,8 +11,8 @@
 
 #include <streamer/main.hpp>
 
-void webrtc_main_thread(std::atomic<bool> &shutdown_requested)
+void webrtc_main_thread(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shutdown_requested)
 {
     set_userspace_thread_name("webrtc_main_thread");
-    stmain(std::ref(shutdown_requested));
+    stmain(ctxmgr, std::ref(shutdown_requested));
 }

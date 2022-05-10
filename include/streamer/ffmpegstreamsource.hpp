@@ -29,7 +29,7 @@ class FFMpegStreamSource : public StreamSource
     std::optional<std::vector<std::byte>> previousUnitType5 = std::nullopt;
     std::optional<std::vector<std::byte>> previousUnitType7 = std::nullopt;
     std::optional<std::vector<std::byte>> previousUnitType8 = std::nullopt;
-    // ThreadSafeMap<RenderedFrame> *frame_map;
+    std::shared_ptr<AVCodecContextManager> ctxmgr;
     uint64_t loopTimestampOffset = 0;
 
 public:
@@ -37,7 +37,7 @@ public:
 
     virtual void start();
     virtual void stop();
-    FFMpegStreamSource();
+    FFMpegStreamSource(std::shared_ptr<AVCodecContextManager> ctxmgr);
     virtual void loadNextSample();
     std::vector<std::byte> initialNALUS();
 };
