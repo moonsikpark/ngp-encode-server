@@ -6,13 +6,9 @@
  **/
 
 #include "nlohmann/json.hpp"
-#include <common.h>
 #include <webrtc.h>
-
-#include <streamer/main.hpp>
 
 void webrtc_main_thread(std::atomic<bool> &shutdown_requested)
 {
     set_userspace_thread_name("webrtc_main_thread");
-    stmain(std::ref(shutdown_requested));
 }
