@@ -53,16 +53,27 @@ int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shu
 			} });
     const rtc::SSRC ssrc = 42;
     rtc::Description::Video media("video", rtc::Description::Direction::SendOnly);
-    media.addH264Codec(102); // Must match the payload type of the external h264 RTP stream
+    media.addH264Codec(96); // Must match the payload type of the external h264 RTP stream
     media.addSSRC(ssrc, "video-send");
     auto track = pc->addTrack(media);
 
-    auto rtpConfig = make_shared<RtpPacketizationConfig>(ssrc, "video-send", 102, H264RtpPacketizer::defaultClockRate);
+    auto rtpConfig = make_shared<RtpPacketizationConfig>(ssrc, "video-send", 96, H264RtpPacketizer::defaultClockRate);
     // create packetizer
     auto packetizer = make_shared<H264RtpPacketizer>(H264RtpPacketizer::Separator::LongStartSequence, rtpConfig);
     // create H264 handler
     auto h264Handler = make_shared<H264PacketizationHandler>(packetizer);
+    // add RTCP SR handler
+    auto srReporter = make_shared<RtcpSrReporter>(rtpConfig);
+    h264Handler->addToChain(srReporter);
+    // add RTCP NACK handler
+    auto nackResponder = make_shared<RtcpNackResponder>();
+    h264Handler->addToChain(nackResponder);
+    // set handler
     track->setMediaHandler(h264Handler);
+    auto currentTime_us = double(currentTimeInMicroSeconds());
+    auto currentTime_s = currentTime_us / (1000 * 1000);
+    srReporter->rtpConfig->setStartTime(currentTime_s, RtpPacketizationConfig::EpochStart::T1970);
+    srReporter->startRecording();
 
     pc->setLocalDescription();
 
@@ -78,8 +89,6 @@ int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shu
     {
         int ret;
         AVPacketManager pktmgr;
-        rtc::RtpHeader *rtp;
-        // tlog::info() << "stmain: avcodec_receive_packet";
         AVPacket *pkt = pktmgr.get();
         {
             // The lock must be in this scope so that it would be unlocked right after avcodec_receive_packet() returns.
@@ -105,65 +114,5 @@ int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shu
             return -1;
         }
     }
-    /*
-    try
-    {
-        InitLogger(LogLevel::Debug);
-        Configuration config;
-        string stunServer = "stun:stun.l.google.com:19302";
-        cout << "Stun server is " << stunServer << endl;
-        config.iceServers.emplace_back(stunServer);
-        config.disableAutoNegotiation = true;
-
-        string localId = "server";
-        cout << "The local ID is: " << localId << endl;
-
-        auto ws = make_shared<WebSocket>();
-
-        ws->onOpen([]()
-                   { cout << "WebSocket connected, signaling ready" << endl; });
-
-        ws->onClosed([]()
-                     { cout << "WebSocket closed" << endl; });
-
-        ws->onError([](const string &error)
-                    { cout << "WebSocket failed: " << error << endl; });
-
-        ws->onMessage([&](variant<binary, string> data)
-                      {
-        if (!holds_alternative<string>(data))
-            return;
-
-        json message = json::parse(get<string>(data));
-        MainThread.dispatch([message, config, ws, ctxmgr]() {
-            wsOnMessage(message, config, ws, ctxmgr);
-        }); });
-
-        const string url = "ws://" + ip_address + ":" + to_string(port) + "/" + localId;
-        cout << "Url is " << url << endl;
-        ws->open(url);
-
-        cout << "Waiting for signaling to be connected..." << endl;
-        while (!ws->isOpen())
-        {
-            if (ws->isClosed())
-                return 1;
-            this_thread::sleep_for(100ms);
-        }
-
-        while (!shutdown_requested)
-        {
-            this_thread::sleep_for(100ms);
-        }
-
-        cout << "Cleaning up..." << endl;
-        return 0;
-    }
-    catch (const std::exception &e)
-    {
-        std::cout << "Error: " << e.what() << std::endl;
-        return -1;
-    }
-    */
     return 0;
 }
