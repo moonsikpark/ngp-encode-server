@@ -22,6 +22,8 @@
 
 #include <sys/prctl.h>
 
+#include <sys/prctl.h>
+
 #include <tinylogger/tinylogger.h>
 
 #include <proto/nes.pb.h>
