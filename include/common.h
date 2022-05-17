@@ -18,6 +18,9 @@
 #include <atomic>
 #include <exception>
 #include <map>
+#include <memory>
+
+#include <sys/prctl.h>
 
 #include <sys/prctl.h>
 
@@ -221,6 +224,7 @@ public:
 #include <camera.h>
 #include <server.h>
 #include <encode_text.h>
+#include <webrtc.h>
 #include <muxing.h>
 
 #endif // _COMMON_H_

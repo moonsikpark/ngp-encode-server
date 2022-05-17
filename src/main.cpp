@@ -123,7 +123,7 @@ int main(int argc, char **argv)
             "FPS",
             "Frame per second of output stream. This does not guarantee that n frames will be present.",
             {"fps"},
-            7,
+            30,
         };
 
         ValueFlag<std::string> font_flag{
@@ -154,7 +154,7 @@ int main(int argc, char **argv)
             parser,
             "WSS_BIND_PORT",
             "Port the websocket server should bind to.",
-            {"PORT"},
+            {"wss_port"},
             9090,
         };
 
@@ -210,7 +210,7 @@ int main(int argc, char **argv)
         auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
 
         tlog::info() << "Initalizing muxing context.";
-        auto mctx = std::make_shared<MuxingContext>(ctxmgr->get_context(), get(rtsp_server_flag));
+        auto mctx = std::make_shared<PipeMuxingContext>("/tmp/videofifo");
 
         tlog::info() << "Initalizing queue.";
         auto frame_queue = std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
@@ -239,6 +239,9 @@ int main(int argc, char **argv)
 
         std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index), std::ref(shutdown_requested));
         threads.push_back(std::move(_encode_stats_thread));
+
+        // std::thread _webrtc_main_thread(webrtc_main_thread, ctxmgr, std::ref(shutdown_requested));
+        // threads.push_back(std::move(_webrtc_main_thread));
 
         for (auto &th : threads)
         {
