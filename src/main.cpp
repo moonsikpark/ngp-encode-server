@@ -123,7 +123,7 @@ int main(int argc, char **argv)
             "FPS",
             "Frame per second of output stream. This does not guarantee that n frames will be present.",
             {"fps"},
-            7,
+            10,
         };
 
         ValueFlag<std::string> font_flag{

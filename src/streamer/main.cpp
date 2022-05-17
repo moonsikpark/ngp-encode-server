@@ -72,6 +72,8 @@ int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shu
     track->setMediaHandler(h264Handler);
     auto currentTime_us = double(currentTimeInMicroSeconds());
     auto currentTime_s = currentTime_us / (1000 * 1000);
+    rtpConfig->timestamp = rtpConfig->secondsToTimestamp(currentTime_s);
+    srReporter->setNeedsToReport();
     srReporter->rtpConfig->setStartTime(currentTime_s, RtpPacketizationConfig::EpochStart::T1970);
     srReporter->startRecording();
 
@@ -85,6 +87,7 @@ int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shu
     rtc::Description answer(j["sdp"].get<std::string>(), j["type"].get<std::string>());
     pc->setRemoteDescription(answer);
 
+    int report = 0;
     while (!shutdown_requested)
     {
         int ret;
@@ -102,8 +105,19 @@ int stmain(std::shared_ptr<AVCodecContextManager> ctxmgr, std::atomic<bool> &shu
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             break;
         case 0:
-            pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, (AVRational){1, 30});
+            pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, (AVRational){1, 10});
             tlog::info() << "stmain: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
+            currentTime_us = double(currentTimeInMicroSeconds());
+            currentTime_s = currentTime_us / (1000 * 1000);
+            rtpConfig->timestamp = rtpConfig->secondsToTimestamp(currentTime_s);
+
+            report++;
+            if (report == 50)
+            {
+                srReporter->setNeedsToReport();
+                report = 0;
+            }
+
             track->send(reinterpret_cast<const std::byte *>(pkt->data), pkt->size);
             break;
         case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
