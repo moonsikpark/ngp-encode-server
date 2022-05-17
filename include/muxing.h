@@ -9,7 +9,8 @@
 #define _MUXING_H_
 
 #include <common.h>
-
+#include <sys/stat.h>
+#include <fcntl.h>
 extern "C"
 {
 #include <libavformat/avformat.h>
@@ -19,6 +20,55 @@ class MuxingContext
 {
 public:
     virtual void consume_packet(AVPacket *pkt) = 0;
+};
+
+class PipeMuxingContext : public MuxingContext
+{
+private:
+    int _pipe;
+    std::string _pipe_location;
+
+public:
+    PipeMuxingContext(std::string pipe_location) : _pipe_location(pipe_location)
+    {
+        unlink(pipe_location.c_str());
+        if (mkfifo(pipe_location.c_str(), 0666) < 0)
+        {
+            throw std::runtime_error{"Failed to make named pipe: " + std::string(std::strerror(errno))};
+        }
+
+        // pipe = open(fifo_name, O_WRONLY | O_NONBLOCK);
+        this->_pipe = open(pipe_location.c_str(), O_WRONLY);
+        tlog::info() << "PipeMuxingContext: Created named pipe at " << pipe_location;
+        if (this->_pipe < 0)
+        {
+            throw std::runtime_error{"Failed to open named pipe: " + std::string(std::strerror(errno))};
+        }
+    }
+
+    void consume_packet(AVPacket *pkt)
+    {
+        size_t total = 0;
+        tlog::info() << "PipeMuxingContext::consume_packet: Received packet.";
+
+        while (total < pkt->size)
+        {
+            ssize_t ret = write(this->_pipe, pkt->data + total, pkt->size - total);
+            if (ret >= 0)
+            {
+                total += ret;
+            }
+            else
+            {
+                throw std::runtime_error{"Failed to send data to pipe: " + std::string(std::strerror(errno))};
+            }
+        }
+    }
+    ~PipeMuxingContext()
+    {
+        close(this->_pipe);
+        unlink(this->_pipe_location.c_str());
+    }
 };
 
 class RTSPMuxingContext : public MuxingContext
@@ -66,15 +116,6 @@ public:
         {
             tlog::error() << "receive_packet_handler: Failed to write frame to muxing context: " << averror_explain(ret);
         }
-    }
-    AVFormatContext *get_fctx()
-    {
-        return this->_fctx;
-    }
-
-    AVStream *get_stream()
-    {
-        return this->_st;
     }
 
     ~RTSPMuxingContext()
