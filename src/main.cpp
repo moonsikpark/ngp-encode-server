@@ -210,7 +210,7 @@ int main(int argc, char **argv)
         auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
 
         tlog::info() << "Initalizing muxing context.";
-        auto mctx = std::make_shared<MuxingContext>(ctxmgr->get_context(), get(rtsp_server_flag));
+        auto mctx = std::make_shared<RTSPMuxingContext>(ctxmgr->get_context(), get(rtsp_server_flag));
 
         tlog::info() << "Initalizing queue.";
         auto frame_queue = std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);

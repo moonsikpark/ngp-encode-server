@@ -128,14 +128,7 @@ int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr, AVPack
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             break;
         case 0:
-            // Packet pts and dts will be based on wall clock.
-            pkt->pts = pkt->dts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, mctx->get_stream()->time_base);
-            // TODO: add more info to print
-            tlog::info() << "receive_packet_handler: Received packet; pts=" << pkt->pts << " dts=" << pkt->dts << " size=" << pkt->size;
-            if ((ret = av_interleaved_write_frame(mctx->get_fctx(), pkt)) < 0)
-            {
-                tlog::error() << "receive_packet_handler: Failed to write frame to muxing context: " << averror_explain(ret);
-            }
+            mctx->consume_packet(pkt);
             return 0;
         case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors: legitimate encoding errors
         default:
