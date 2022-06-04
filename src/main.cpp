@@ -28,7 +28,6 @@ int main(int argc, char **argv) {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
   // TODO: Use POSIX standard sigaction(2)
   signal(SIGINT, signal_handler);
-  signal(SIGPIPE, SIG_IGN);
   try {
     ArgumentParser parser{
         "ngp encode server\n"
@@ -210,22 +209,14 @@ int main(int argc, char **argv) {
                                    encode_queue, std::ref(shutdown_requested));
     threads.push_back(std::move(_send_frame_thread));
 
-    // std::thread _camera_websocket_main_thread(camera_websocket_main_thread,
-    // cameramgr, get(wsserver_bind_port), get(wsserver_cert_location),
-    // get(wsserver_dhparam_location), std::ref(shutdown_requested));
-    // threads.push_back(std::move(_camera_websocket_main_thread));
-
     std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index),
                                      std::ref(shutdown_requested));
     threads.push_back(std::move(_encode_stats_thread));
 
-    // std::thread _webrtc_main_thread(webrtc_main_thread, ctxmgr,
-    // std::ref(shutdown_requested));
-    // threads.push_back(std::move(_webrtc_main_thread));
-
     for (auto &th : threads) {
       th.join();
     }
+
     mctx->stop();
     ccsvr->stop();
 
