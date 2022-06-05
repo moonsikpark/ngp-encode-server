@@ -178,11 +178,11 @@ class ScopedTimer {
   }
 };
 
+#include <wsserver.h>
 #include <camera.h>
 #include <encode.h>
 #include <encode_text.h>
 #include <muxing.h>
 #include <server.h>
-#include <wsserver.h>
 
 #endif  // _COMMON_H_
