@@ -25,10 +25,11 @@ class RenderedFrame {
   AVPixelFormat _pix_fmt;
   struct SwsContext *_sws_ctx;
   bool _processed;
+  nesproto::Camera _cam;
 
 public:
-  RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt)
-      : _pix_fmt(pix_fmt), _processed(false) {
+  RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt, nesproto::Camera cam)
+      : _pix_fmt(pix_fmt), _processed(false), _cam(cam) {
     this->_frame = frame;
   }
   // Forbid copying or moving of RenderedFrame.
@@ -90,6 +91,8 @@ public:
 
   const uint32_t height() const { return this->_frame.height(); }
 
+  const nesproto::Camera get_cam() const { return this->_cam; }
+
   uint8_t *processed_data() {
     if (!this->_processed) {
       throw std::runtime_error{
@@ -125,7 +128,7 @@ public:
                         std::string x264_encode_preset,
                         std::string x264_encode_tune, unsigned int width,
                         unsigned int height, unsigned int bit_rate,
-                        unsigned int fps) {
+                        unsigned int fps, unsigned int keyint) {
     int ret;
     AVCodec *codec;
     AVDictionary *options = nullptr;
@@ -143,6 +146,8 @@ public:
     this->_ctx->height = height;
     this->_ctx->time_base = (AVRational){1, (int)fps};
     this->_ctx->pix_fmt = pix_fmt;
+
+    av_opt_set(_ctx->priv_data, "x264opts", "keyint", keyint);
 
     av_dict_set(&options, "preset", x264_encode_preset.c_str(), 0);
     av_dict_set(&options, "tune", x264_encode_tune.c_str(), 0);

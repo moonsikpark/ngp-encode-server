@@ -88,8 +88,8 @@ public:
       pen_y = height - y_box + margin;
       break;
     case EncodeTextContext::RenderPositionOption::CENTER:
-      pen_x = width / 2;
-      pen_y = height / 2;
+      pen_x = width / 2 - x_box;
+      pen_y = height / 2 - y_box;
       break;
     default:
       pen_x = margin;
@@ -97,7 +97,14 @@ public:
       break;
     }
 
+    int orig_pen_x = pen_x, orig_pen_y = pen_y;
+    
     for (auto &ch : content) {
+      if (ch == '\n') {
+        pen_x = orig_pen_x;
+        pen_y = pen_y + 20;
+        continue;
+      }
       /* load glyph image into the slot (erase previous one) */
       ret = FT_Load_Char(this->_face, ch, FT_LOAD_RENDER);
       if (ret) {

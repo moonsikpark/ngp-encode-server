@@ -102,13 +102,20 @@ int main(int argc, char **argv) {
         {"fps"},
         30,
     };
+    ValueFlag<unsigned int> keyint_flag{
+        parser,
+        "KEYINT",
+        "Group of picture (GOP) size",
+        {"keyint"},
+        250,
+    };
 
     ValueFlag<std::string> font_flag{
         parser,
         "FONT",
         "Location of a font file used to render texts.",
         {"font"},
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf",
     };
 
     ValueFlag<uint16_t> camera_control_server_port{
@@ -159,11 +166,12 @@ int main(int argc, char **argv) {
         get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag),
         AV_PIX_FMT_YUV420P);
 
+
     tlog::info() << "Initalizing encoder.";
     auto ctxmgr = std::make_shared<AVCodecContextManager>(
         AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
         get(encode_tune_flag), get(width_flag), get(height_flag),
-        get(bitrate_flag), get(fps_flag));
+        get(bitrate_flag), get(fps_flag), get(keyint_flag));
 
     tlog::info() << "Initializing text renderer.";
     auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));

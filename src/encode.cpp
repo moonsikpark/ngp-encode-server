@@ -6,6 +6,26 @@
  **/
 
 #include <common.h>
+#include <chrono>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
+
+std::string timestamp()
+{
+    using namespace std::chrono;
+    using clock = system_clock;
+    
+    const auto current_time_point {clock::now()};
+    const auto current_time {clock::to_time_t (current_time_point)};
+    const auto current_localtime {*std::localtime (&current_time)};
+    const auto current_time_since_epoch {current_time_point.time_since_epoch()};
+    const auto current_milliseconds {duration_cast<milliseconds> (current_time_since_epoch).count() % 1000};
+    
+    std::ostringstream stream;
+    stream << std::put_time (&current_localtime, "%T") << "." << std::setw (3) << std::setfill ('0') << current_milliseconds;
+    return stream.str();
+}
 
 std::string averror_explain(int err) {
   char errbuf[500];
@@ -34,9 +54,33 @@ void process_frame_thread(
         ScopedTimer timer;
         uint64_t frame_index = frame->index();
 
+        nesproto::Camera cam = frame->get_cam();
+
+        std::stringstream cam_matrix;
+        int idx = 0;
+        for (auto it: cam.matrix()) {
+            idx++;
+            cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << it << ' ';
+            if (idx % 4 == 0) {
+              cam_matrix << '\n';
+            }
+        }
+        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 1.f << ' ';
+
         etctx->render_string_to_frame(
             frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM,
             std::string("index=") + std::to_string(frame_index));
+
+        etctx->render_string_to_frame(
+            frame, EncodeTextContext::RenderPositionOption::LEFT_TOP,
+            timestamp());
+
+        etctx->render_string_to_frame(
+            frame, EncodeTextContext::RenderPositionOption::CENTER,
+            cam_matrix.str());
 
         frame->convert_frame(veparams);
 
@@ -190,9 +234,9 @@ void encode_stats_thread(std::atomic<std::uint64_t> &frame_index,
   while (!shutdown_requested) {
     uint64_t current_index = frame_index.load();
     tlog::info()
-        << "encode_stats_thread: Average frame rate of the last 10 seconds: "
-        << (current_index - previous_index) / 10 << " fps.";
+        << "encode_stats_thread: Average frame rate of the last 3 seconds: "
+        << (current_index - previous_index) / 3 << " fps.";
     previous_index = current_index;
-    std::this_thread::sleep_for(std::chrono::seconds(10));
+    std::this_thread::sleep_for(std::chrono::seconds(3));
   }
 }
