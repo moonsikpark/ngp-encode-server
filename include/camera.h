@@ -25,13 +25,13 @@ class CameraManager {
     *this->_camera.mutable_matrix() = {init, init + 12};
   }
   void set_camera(nesproto::Camera camera) {
-    unique_lock lock(this->_mutex);
+    //unique_lock lock(this->_mutex);
     // XXX: Is it okay to not wait for the conditional_variable??
     this->_camera = camera;
   }
 
   nesproto::Camera get_camera() {
-    unique_lock lock(this->_mutex);
+    //unique_lock lock(this->_mutex);
     return this->_camera;
   }
 };
