@@ -25,11 +25,10 @@ class RenderedFrame {
   AVPixelFormat _pix_fmt;
   struct SwsContext *_sws_ctx;
   bool _processed;
-  nesproto::Camera _cam;
 
 public:
-  RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt, nesproto::Camera cam)
-      : _pix_fmt(pix_fmt), _processed(false), _cam(cam) {
+  RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt)
+      : _pix_fmt(pix_fmt), _processed(false) {
     this->_frame = frame;
   }
   // Forbid copying or moving of RenderedFrame.
@@ -56,15 +55,15 @@ public:
 
     // TODO: specify flags
     this->_sws_ctx = sws_getContext(
-        this->width(), this->height(), this->_pix_fmt, veparams->width(),
-        veparams->height(), veparams->pix_fmt(), 0, 0, 0, 0);
+        this->width(), this->height(), this->_pix_fmt, this->width(), 
+        this->height(), veparams->pix_fmt(), 0, 0, 0, 0);
 
     if (!this->_sws_ctx) {
       throw std::runtime_error{"Failed to allocate sws_context."};
     }
 
     if (av_image_alloc(this->_processed_data, this->_processed_linesize,
-                       veparams->width(), veparams->height(),
+                       this->width(), this->height(),
                        veparams->pix_fmt(), 32) < 0) {
       tlog::error("Failed to allocate frame data.");
     }
@@ -87,11 +86,11 @@ public:
 
   uint8_t *buffer() { return (uint8_t *)this->_frame.frame().data(); }
 
-  const uint32_t width() const { return this->_frame.width(); }
+  const uint32_t width() const { return this->_frame.camera().width(); }
 
-  const uint32_t height() const { return this->_frame.height(); }
+  const uint32_t height() const { return this->_frame.camera().height(); }
 
-  const nesproto::Camera get_cam() const { return this->_cam; }
+  const nesproto::Camera get_cam() const { return this->_frame.camera(); }
 
   uint8_t *processed_data() {
     if (!this->_processed) {
@@ -122,18 +121,37 @@ class AVCodecContextManager {
 private:
   AVCodecContext *_ctx;
   std::mutex _mutex;
+  std::condition_variable _wait;
+  AVCodecID _codec_id;
+  AVPixelFormat _pix_fmt;
+  std::string _x264_encode_preset;
+  std::string _x264_encode_tune;
+  unsigned int _bit_rate;
+  unsigned int _fps;
+  unsigned int _keyint;
+
+  using unique_lock = std::unique_lock<std::mutex>;
 
 public:
   AVCodecContextManager(AVCodecID codec_id, AVPixelFormat pix_fmt,
                         std::string x264_encode_preset,
                         std::string x264_encode_tune, unsigned int width,
                         unsigned int height, unsigned int bit_rate,
-                        unsigned int fps, unsigned int keyint) {
-    int ret;
-    AVCodec *codec;
-    AVDictionary *options = nullptr;
+                        unsigned int fps, unsigned int keyint) : _codec_id(codec_id), _pix_fmt(pix_fmt), _x264_encode_preset(x264_encode_preset), _x264_encode_tune(x264_encode_tune), _bit_rate(bit_rate), _fps(fps), _keyint(keyint) {
+                          codec_setup(width, height);
+  }
 
-    if (!(codec = avcodec_find_encoder(codec_id))) {
+  void codec_setup(uint32_t width, uint32_t height) {
+    int ret;
+
+    std::unique_lock<std::mutex> lock(this->get_mutex());
+    
+    avcodec_free_context(&this->_ctx);
+
+    AVDictionary *options = nullptr;
+    AVCodec *codec;
+
+    if (!(codec = avcodec_find_encoder(_codec_id))) {
       throw std::runtime_error{"Failed to find encoder."};
     }
 
@@ -141,16 +159,16 @@ public:
       throw std::runtime_error{"Failed to allocate codec context."};
     }
 
-    this->_ctx->bit_rate = bit_rate;
+    this->_ctx->bit_rate = _bit_rate;
     this->_ctx->width = width;
     this->_ctx->height = height;
-    this->_ctx->time_base = (AVRational){1, (int)fps};
-    this->_ctx->pix_fmt = pix_fmt;
+    this->_ctx->time_base = (AVRational){1, (int)_fps};
+    this->_ctx->pix_fmt = _pix_fmt;
 
-    av_opt_set(_ctx->priv_data, "x264opts", "keyint", keyint);
+    av_opt_set(_ctx->priv_data, "x264opts", "keyint", _keyint);
 
-    av_dict_set(&options, "preset", x264_encode_preset.c_str(), 0);
-    av_dict_set(&options, "tune", x264_encode_tune.c_str(), 0);
+    av_dict_set(&options, "preset", _x264_encode_preset.c_str(), 0);
+    av_dict_set(&options, "tune", _x264_encode_tune.c_str(), 0);
 
     ret = avcodec_open2(this->_ctx, (const AVCodec *)codec, &options);
     av_dict_free(&options);
@@ -159,6 +177,8 @@ public:
       throw std::runtime_error{std::string("Failed to open codec: ") +
                                averror_explain(ret)};
     }
+    
+    tlog::debug() << "setup() success width=" << width << " height=" << height;
   }
 
   std::mutex &get_mutex() { return this->_mutex; }
@@ -167,8 +187,7 @@ public:
 
   ~AVCodecContextManager() {
     if (this->_ctx) {
-      avcodec_close(this->_ctx);
-      av_free(this->_ctx);
+      avcodec_free_context(&this->_ctx);
     }
   }
 };

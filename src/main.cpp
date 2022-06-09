@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
     auto frame_queue =
         std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
     auto encode_queue = std::make_shared<ThreadSafeMap<RenderedFrame>>(100);
-    auto cameramgr = std::make_shared<CameraManager>();
+    auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag), get(height_flag));
 
     tlog::info() << "Initalizing camera control server.";
     auto ccsvr = std::make_shared<CameraControlServer>(

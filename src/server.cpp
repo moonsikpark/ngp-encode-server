@@ -124,14 +124,13 @@ void socket_client_thread(
     }
 
     nesproto::FrameRequest req;
-    nesproto::Camera cam{cameramgr->get_camera()};
 
     // HACK: set this with correct res when we replace AVCodecContext.
     req.set_index(frame_index.fetch_add(1));
-    req.set_width(veparams->width());
-    req.set_height(veparams->height());
+    // req.set_width(veparams->width());
+    // req.set_height(veparams->height());
     // set_allocated_* destroys the object.
-    req.mutable_camera()->CopyFrom(cam);
+    req.mutable_camera()->CopyFrom(cameramgr->get_camera());
 
     std::string req_serialized = req.SerializeAsString();
 
@@ -160,7 +159,7 @@ void socket_client_thread(
 
     // Create a new RenderedFrame.
     std::unique_ptr<RenderedFrame> frame_o =
-        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR32, cam);
+        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR8);
 
     try {
       // Push the frame to the frame queue.

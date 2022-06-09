@@ -15,18 +15,27 @@ class CameraManager {
   nesproto::Camera _camera;
   std::condition_variable _wait;
   std::mutex _mutex;
+  std::shared_ptr<AVCodecContextManager> _ctxmgr;
 
   using unique_lock = std::unique_lock<std::mutex>;
 
  public:
-  CameraManager() {
+  CameraManager(std::shared_ptr<AVCodecContextManager> ctxmgr, uint32_t default_width, uint32_t default_height) : _ctxmgr(ctxmgr){
+    // Set default transformation matrix, width and height
     float init[] = {1.0f, 0.0f, 0.0f, 0.5f, 0.0f,  -1.0f,
                     0.0f, 0.5f, 0.0f, 0.0f, -1.0f, 0.5f};
     *this->_camera.mutable_matrix() = {init, init + 12};
+    this->_camera.set_width(default_width);
+    this->_camera.set_height(default_height);
   }
   void set_camera(nesproto::Camera camera) {
     //unique_lock lock(this->_mutex);
     // XXX: Is it okay to not wait for the conditional_variable??
+
+    // Resolution has changed. Reset the encoder.
+    if (this->_camera.width() != camera.width() || this->_camera.height() != camera.height()) {
+      this->_ctxmgr->codec_setup(camera.width(), camera.height());
+    }
     this->_camera = camera;
   }
 
