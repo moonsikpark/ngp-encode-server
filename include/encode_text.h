@@ -120,9 +120,9 @@ public:
           if (i < 0 || j < 0 || i >= width || j >= height)
             continue;
           if (slot->bitmap.buffer[q * slot->bitmap.width + p]) {
-            surface[(j * width + i) * 4] = 255;
-            surface[(j * width + i) * 4 + 1] = 255;
-            surface[(j * width + i) * 4 + 2] = 255;
+            surface[(j * width + i) * 3] = 255;
+            surface[(j * width + i) * 3 + 1] = 255;
+            surface[(j * width + i) * 3 + 2] = 255;
           }
         }
       }
