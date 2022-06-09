@@ -119,11 +119,11 @@ void send_frame_thread(
         ScopedTimer timer;
 
         frm->format = veparams->pix_fmt();
-        frm->width = veparams->width();
-        frm->height = veparams->height();
+        frm->width = processed_frame->width();
+        frm->height = processed_frame->height();
 
-        if ((ret = av_image_alloc(frm->data, frm->linesize, veparams->width(),
-                                  veparams->height(), veparams->pix_fmt(),
+        if ((ret = av_image_alloc(frm->data, frm->linesize, processed_frame->width(),
+                                  processed_frame->height(), veparams->pix_fmt(),
                                   32)) < 0) {
           throw std::runtime_error{
               std::string(
@@ -132,13 +132,12 @@ void send_frame_thread(
         }
 
         ret = av_image_fill_pointers(frm->data, veparams->pix_fmt(),
-                                     veparams->height(),
+                                     processed_frame->height(),
                                      processed_frame->processed_data(),
                                      processed_frame->processed_linesize());
         {
-          ResourceLock<std::mutex, AVCodecContext> lock{ctxmgr->get_mutex(),
-                                                        ctxmgr->get_context()};
-          AVCodecContext *ctx = lock.get();
+          std::unique_lock<std::mutex> lock(ctxmgr->get_mutex());
+          AVCodecContext *ctx = ctxmgr->get_context();
 
           // TODO: handle error codes!
           // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
@@ -176,9 +175,9 @@ int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr,
     {
       // The lock must be in this scope so that it would be unlocked right after
       // avcodec_receive_packet() returns.
-      ResourceLock<std::mutex, AVCodecContext> avcodeccontextlock{
-          ctxmgr->get_mutex(), ctxmgr->get_context()};
-      ret = avcodec_receive_packet(avcodeccontextlock.get(), pkt);
+      std::unique_lock<std::mutex> lock(ctxmgr->get_mutex());
+      AVCodecContext *ctx = ctxmgr->get_context();
+      ret = avcodec_receive_packet(ctx, pkt);
     }
 
     switch (ret) {

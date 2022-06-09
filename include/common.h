@@ -148,21 +148,6 @@ class ThreadSafeMap {
   }
 };
 
-// TODO: implement a conditional_variable like feature.
-// TODO: need to have timeout for the lock!
-template <class Lockable, class Resource>
-class ResourceLock {
- private:
-  Lockable &_lockable;
-  Resource *_resource;
-
- public:
-  ResourceLock(Lockable &l, Resource *r) : _lockable(l), _resource(r) {
-    this->_lockable.lock();
-  }
-  Resource *get() { return this->_resource; }
-  ~ResourceLock() { this->_lockable.unlock(); }
-};
 
 class ScopedTimer {
   using clock = std::chrono::steady_clock;
@@ -180,8 +165,8 @@ class ScopedTimer {
 };
 
 #include <wsserver.h>
-#include <camera.h>
 #include <encode.h>
+#include <camera.h>
 #include <encode_text.h>
 #include <muxing.h>
 #include <server.h>
