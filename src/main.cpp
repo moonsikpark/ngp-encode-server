@@ -17,7 +17,7 @@ using namespace args;
 
 std::atomic<bool> shutdown_requested{false};
 
-void signal_handler(int) { shutdown_requested = true; }
+void signal_handler(int) { shutdown_requested.store(false); }
 
 void set_userspace_thread_name(std::string name) {
   prctl(PR_SET_NAME, name.c_str());
