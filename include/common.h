@@ -32,7 +32,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-void set_userspace_thread_name(std::string name);
+void set_thread_name(std::string name);
 
 class lock_timeout : public std::exception {
   virtual const char *what() const throw() {

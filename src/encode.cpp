@@ -44,7 +44,7 @@ void process_frame_thread(
     std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue,
     std::shared_ptr<EncodeTextContext> etctx,
     std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name("process_frame");
+  set_thread_name("process_frame");
   int ret;
 
   while (!shutdown_requested) {
@@ -102,7 +102,7 @@ void send_frame_thread(
     std::shared_ptr<AVCodecContextManager> ctxmgr,
     std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue,
     std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name("send_frame");
+  set_thread_name("send_frame");
   AVFrame *frm;
   uint64_t frame_index = 0;
   int ret;
@@ -206,7 +206,7 @@ int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr,
 void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr,
                            std::shared_ptr<MuxingContext> mctx,
                            std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name("receive_packet");
+  set_thread_name("receive_packet");
   while (!shutdown_requested) {
     AVPacketManager pktmgr;
     try {
@@ -228,7 +228,7 @@ void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr,
 
 void encode_stats_thread(std::atomic<std::uint64_t> &frame_index,
                          std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name("encode_stats");
+  set_thread_name("encode_stats");
   uint64_t previous_index = 0;
   while (!shutdown_requested) {
     uint64_t current_index = frame_index.load();

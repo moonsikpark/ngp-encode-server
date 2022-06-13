@@ -111,7 +111,7 @@ void socket_client_thread(
     std::shared_ptr<VideoEncodingParams> veparams,
     std::shared_ptr<CameraManager> cameramgr,
     std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name(std::string("socket_client=") +
+  set_thread_name(std::string("socket_client=") +
                             std::to_string(targetfd));
   int ret = 0;
   tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
@@ -185,7 +185,7 @@ void socket_manage_thread(
     std::shared_ptr<VideoEncodingParams> veparams,
     std::shared_ptr<CameraManager> cameramgr,
     std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name(std::string("socket_manage=") + renderer);
+  set_thread_name(std::string("socket_manage=") + renderer);
   int error_times = 0;
   while (!shutdown_requested) {
     std::stringstream renderer_parsed(renderer);
@@ -251,7 +251,7 @@ void socket_main_thread(
     std::shared_ptr<VideoEncodingParams> veparams,
     std::shared_ptr<CameraManager> cameramgr,
     std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name("socket_main");
+  set_thread_name("socket_main");
   std::vector<std::thread> threads;
 
   tlog::info() << "socket_main_thread: Connecting to renderers.";

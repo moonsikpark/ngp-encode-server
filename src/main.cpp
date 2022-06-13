@@ -15,19 +15,30 @@
 
 using namespace args;
 
+namespace {
+
+volatile std::sig_atomic_t signal_status = 0;
+
+static_assert(std::atomic<bool>::is_always_lock_free);
+
 std::atomic<bool> shutdown_requested{false};
 
-void signal_handler(int) { shutdown_requested.store(false); }
+}
 
-void set_userspace_thread_name(std::string name) {
+void signal_handler(int signum) { 
+    signal_status = signum;
+    shutdown_requested.store(true); 
+}
+
+void set_thread_name(std::string name) {
   prctl(PR_SET_NAME, name.c_str());
 }
 
 int main(int argc, char **argv) {
-  set_userspace_thread_name("main");
+  set_thread_name("main");
   GOOGLE_PROTOBUF_VERIFY_VERSION;
-  // TODO: Use POSIX standard sigaction(2)
-  signal(SIGINT, signal_handler);
+  std::signal(SIGINT, signal_handler);
+
   try {
     ArgumentParser parser{
         "ngp encode server\n"
