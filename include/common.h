@@ -8,7 +8,7 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-#include <proto/nes.pb.h>
+#include <nes.pb.h>
 #include <sys/prctl.h>
 #include <tinylogger/tinylogger.h>
 
