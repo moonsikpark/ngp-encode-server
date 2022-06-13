@@ -5,13 +5,12 @@
  *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
 
-#include <atomic>
-#include <csignal>
-#include <thread>
-
 #include <common.h>
 
 #include <args/args.hxx>
+#include <atomic>
+#include <csignal>
+#include <thread>
 
 using namespace args;
 
@@ -23,16 +22,14 @@ static_assert(std::atomic<bool>::is_always_lock_free);
 
 std::atomic<bool> shutdown_requested{false};
 
+}  // namespace
+
+void signal_handler(int signum) {
+  signal_status = signum;
+  shutdown_requested.store(true);
 }
 
-void signal_handler(int signum) { 
-    signal_status = signum;
-    shutdown_requested.store(true); 
-}
-
-void set_thread_name(std::string name) {
-  prctl(PR_SET_NAME, name.c_str());
-}
+void set_thread_name(std::string name) { prctl(PR_SET_NAME, name.c_str()); }
 
 int main(int argc, char **argv) {
   set_thread_name("main");
@@ -114,11 +111,7 @@ int main(int argc, char **argv) {
         30,
     };
     ValueFlag<unsigned int> keyint_flag{
-        parser,
-        "KEYINT",
-        "Group of picture (GOP) size",
-        {"keyint"},
-        250,
+        parser, "KEYINT", "Group of picture (GOP) size", {"keyint"}, 250,
     };
 
     ValueFlag<std::string> font_flag{
@@ -177,7 +170,6 @@ int main(int argc, char **argv) {
         get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag),
         AV_PIX_FMT_YUV420P);
 
-
     tlog::info() << "Initalizing encoder.";
     auto ctxmgr = std::make_shared<AVCodecContextManager>(
         AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
@@ -196,7 +188,8 @@ int main(int argc, char **argv) {
     auto frame_queue =
         std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
     auto encode_queue = std::make_shared<ThreadSafeMap<RenderedFrame>>(100);
-    auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag), get(height_flag));
+    auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag),
+                                                     get(height_flag));
 
     tlog::info() << "Initalizing camera control server.";
     auto ccsvr = std::make_shared<CameraControlServer>(

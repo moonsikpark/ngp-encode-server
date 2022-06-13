@@ -12,7 +12,6 @@
 
 #include <iostream>
 #include <thread>
-
 #include <websocketpp/config/asio.hpp>
 #include <websocketpp/server.hpp>
 
@@ -31,7 +30,7 @@ typedef std::set<websocketpp::connection_hdl,
     con_list;
 
 class WebSocketServer {
-private:
+ private:
   server_notls m_server;
   con_list m_connections;
   websocketpp::lib::shared_ptr<websocketpp::lib::thread> m_thread;
@@ -41,7 +40,7 @@ private:
 
   static void run_server(server_notls *s) { s->run(); }
 
-public:
+ public:
   virtual void message_handler(websocketpp::connection_hdl hdl,
                                message_ptr msg) = 0;
 
@@ -109,4 +108,4 @@ public:
   }
 };
 
-#endif // _WSSERVER_H_
+#endif  // _WSSERVER_H_

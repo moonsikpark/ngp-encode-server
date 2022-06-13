@@ -16,16 +16,16 @@ extern "C" {
 }
 
 class MuxingContext {
-public:
+ public:
   virtual void consume_packet(AVPacket *pkt) = 0;
 };
 
 class PipeMuxingContext : public MuxingContext {
-private:
+ private:
   int _pipe;
   std::string _pipe_location;
 
-public:
+ public:
   PipeMuxingContext(std::string pipe_location) : _pipe_location(pipe_location) {
     unlink(pipe_location.c_str());
     if (mkfifo(pipe_location.c_str(), 0666) < 0) {
@@ -64,11 +64,11 @@ public:
 };
 
 class RTSPMuxingContext : public MuxingContext {
-private:
+ private:
   AVFormatContext *_fctx;
   AVStream *_st;
 
-public:
+ public:
   RTSPMuxingContext(const AVCodecContext *ctx, std::string rtsp_mrl) {
     int ret;
     if ((ret = avformat_alloc_output_context2(&this->_fctx, NULL, "rtsp",
@@ -123,7 +123,7 @@ public:
 };
 
 class PacketStreamServer : public MuxingContext, public WebSocketServer {
-public:
+ public:
   PacketStreamServer(uint16_t bind_port)
       : WebSocketServer(std::string("PacketStreamServer"), bind_port) {}
 
@@ -135,4 +135,4 @@ public:
     tlog::info() << "PacketStreamServer: sent packet.";
   }
 };
-#endif // _MUXING_H_
+#endif  // _MUXING_H_

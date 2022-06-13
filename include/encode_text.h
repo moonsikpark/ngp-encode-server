@@ -16,11 +16,11 @@ extern "C" {
 }
 
 class EncodeTextContext {
-private:
+ private:
   FT_Library _library;
   FT_Face _face;
 
-public:
+ public:
   enum class RenderPositionOption {
     LEFT_TOP,
     LEFT_BOTTOM,
@@ -71,34 +71,34 @@ public:
     int margin = 50;
 
     switch (opt) {
-    case EncodeTextContext::RenderPositionOption::LEFT_TOP:
-      pen_x = margin;
-      pen_y = margin;
-      break;
-    case EncodeTextContext::RenderPositionOption::LEFT_BOTTOM:
-      pen_x = margin;
-      pen_y = height - y_box + margin;
-      break;
-    case EncodeTextContext::RenderPositionOption::RIGHT_TOP:
-      pen_x = width - x_box + margin;
-      pen_y = margin;
-      break;
-    case EncodeTextContext::RenderPositionOption::RIGHT_BOTTOM:
-      pen_x = width - x_box + margin;
-      pen_y = height - y_box + margin;
-      break;
-    case EncodeTextContext::RenderPositionOption::CENTER:
-      pen_x = width / 2 - x_box;
-      pen_y = height / 2 - y_box;
-      break;
-    default:
-      pen_x = margin;
-      pen_y = margin;
-      break;
+      case EncodeTextContext::RenderPositionOption::LEFT_TOP:
+        pen_x = margin;
+        pen_y = margin;
+        break;
+      case EncodeTextContext::RenderPositionOption::LEFT_BOTTOM:
+        pen_x = margin;
+        pen_y = height - y_box + margin;
+        break;
+      case EncodeTextContext::RenderPositionOption::RIGHT_TOP:
+        pen_x = width - x_box + margin;
+        pen_y = margin;
+        break;
+      case EncodeTextContext::RenderPositionOption::RIGHT_BOTTOM:
+        pen_x = width - x_box + margin;
+        pen_y = height - y_box + margin;
+        break;
+      case EncodeTextContext::RenderPositionOption::CENTER:
+        pen_x = width / 2 - x_box;
+        pen_y = height / 2 - y_box;
+        break;
+      default:
+        pen_x = margin;
+        pen_y = margin;
+        break;
     }
 
     int orig_pen_x = pen_x, orig_pen_y = pen_y;
-    
+
     for (auto &ch : content) {
       if (ch == '\n') {
         pen_x = orig_pen_x;
@@ -117,8 +117,7 @@ public:
       FT_Int y_max = pen_y - slot->bitmap_top + slot->bitmap.rows;
       for (j = pen_y - slot->bitmap_top, q = 0; j < y_max; j++, q++) {
         for (i = pen_x + slot->bitmap_left, p = 0; i < x_max; i++, p++) {
-          if (i < 0 || j < 0 || i >= width || j >= height)
-            continue;
+          if (i < 0 || j < 0 || i >= width || j >= height) continue;
           if (slot->bitmap.buffer[q * slot->bitmap.width + p]) {
             surface[(j * width + i) * 3] = 255;
             surface[(j * width + i) * 3 + 1] = 255;
@@ -135,4 +134,4 @@ public:
   ~EncodeTextContext() { FT_Done_FreeType(this->_library); }
 };
 
-#endif // _ENCODE_TEXT_H_
+#endif  // _ENCODE_TEXT_H_

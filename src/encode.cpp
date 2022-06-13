@@ -6,25 +6,27 @@
  **/
 
 #include <common.h>
+
 #include <chrono>
 #include <ctime>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
-std::string timestamp()
-{
-    using namespace std::chrono;
-    using clock = system_clock;
-    
-    const auto current_time_point {clock::now()};
-    const auto current_time {clock::to_time_t (current_time_point)};
-    const auto current_localtime {*std::localtime (&current_time)};
-    const auto current_time_since_epoch {current_time_point.time_since_epoch()};
-    const auto current_milliseconds {duration_cast<milliseconds> (current_time_since_epoch).count() % 1000};
-    
-    std::ostringstream stream;
-    stream << std::put_time (&current_localtime, "%T") << "." << std::setw (3) << std::setfill ('0') << current_milliseconds;
-    return stream.str();
+std::string timestamp() {
+  using namespace std::chrono;
+  using clock = system_clock;
+
+  const auto current_time_point{clock::now()};
+  const auto current_time{clock::to_time_t(current_time_point)};
+  const auto current_localtime{*std::localtime(&current_time)};
+  const auto current_time_since_epoch{current_time_point.time_since_epoch()};
+  const auto current_milliseconds{
+      duration_cast<milliseconds>(current_time_since_epoch).count() % 1000};
+
+  std::ostringstream stream;
+  stream << std::put_time(&current_localtime, "%T") << "." << std::setw(3)
+         << std::setfill('0') << current_milliseconds;
+  return stream.str();
 }
 
 std::string averror_explain(int err) {
@@ -58,17 +60,22 @@ void process_frame_thread(
 
         std::stringstream cam_matrix;
         int idx = 0;
-        for (auto it: cam.matrix()) {
-            idx++;
-            cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << it << ' ';
-            if (idx % 4 == 0) {
-              cam_matrix << '\n';
-            }
+        for (auto it : cam.matrix()) {
+          idx++;
+          cam_matrix << std::fixed << std::showpos << std::setw(7)
+                     << std::setprecision(5) << std::setfill('0') << it << ' ';
+          if (idx % 4 == 0) {
+            cam_matrix << '\n';
+          }
         }
-        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
-        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
-        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
-        cam_matrix << std::fixed << std::showpos << std::setw(7) << std::setprecision(5) << std::setfill('0') << 1.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
+        cam_matrix << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 1.f << ' ';
 
         etctx->render_string_to_frame(
             frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM,
@@ -122,9 +129,9 @@ void send_frame_thread(
         frm->width = processed_frame->width();
         frm->height = processed_frame->height();
 
-        if ((ret = av_image_alloc(frm->data, frm->linesize, processed_frame->width(),
-                                  processed_frame->height(), veparams->pix_fmt(),
-                                  32)) < 0) {
+        if ((ret = av_image_alloc(
+                 frm->data, frm->linesize, processed_frame->width(),
+                 processed_frame->height(), veparams->pix_fmt(), 32)) < 0) {
           throw std::runtime_error{
               std::string(
                   "send_frame_thread: Failed to allocate AVFrame data: ") +
@@ -181,22 +188,22 @@ int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr,
     }
 
     switch (ret) {
-    case AVERROR(EAGAIN): // output is not available in the current state - user
-                          // must try to send input
-      // We must sleep here so that other threads can acquire AVCodecContext.
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      break;
-    case 0:
-      mctx->consume_packet(pkt);
-      return 0;
-    case AVERROR(EINVAL): // codec not opened, or it is a decoder other errors:
-                          // legitimate encoding errors
-    default:
-      tlog::error() << "receive_packet_handler: Failed to receive packet: "
-                    << averror_explain(ret);
-    case AVERROR_EOF: // the encoder has been fully flushed, and there will be
-                      // no more output packets
-      return -1;
+      case AVERROR(EAGAIN):  // output is not available in the current state -
+                             // user must try to send input
+        // We must sleep here so that other threads can acquire AVCodecContext.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        break;
+      case 0:
+        mctx->consume_packet(pkt);
+        return 0;
+      case AVERROR(EINVAL):  // codec not opened, or it is a decoder other
+                             // errors: legitimate encoding errors
+      default:
+        tlog::error() << "receive_packet_handler: Failed to receive packet: "
+                      << averror_explain(ret);
+      case AVERROR_EOF:  // the encoder has been fully flushed, and there will
+                         // be no more output packets
+        return -1;
     }
   }
 

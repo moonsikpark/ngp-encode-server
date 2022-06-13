@@ -6,7 +6,6 @@
  **/
 
 #include <common.h>
-
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -88,8 +87,9 @@ std::string socket_receive_blocking_lpf(int targetfd) {
   // todo: silently fail, do not wail error.
   if ((ret = socket_receive_blocking(targetfd, (uint8_t *)&size,
                                      sizeof(size))) < 0) {
-    throw std::runtime_error{"socket_receive_blocking_lpf: Error while "
-                             "receiving data size from socket."};
+    throw std::runtime_error{
+        "socket_receive_blocking_lpf: Error while "
+        "receiving data size from socket."};
   }
 
   auto buffer = std::make_unique<char[]>(size);
@@ -111,8 +111,7 @@ void socket_client_thread(
     std::shared_ptr<VideoEncodingParams> veparams,
     std::shared_ptr<CameraManager> cameramgr,
     std::atomic<bool> &shutdown_requested) {
-  set_thread_name(std::string("socket_client=") +
-                            std::to_string(targetfd));
+  set_thread_name(std::string("socket_client=") + std::to_string(targetfd));
   int ret = 0;
   tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
   while (!shutdown_requested) {

@@ -148,7 +148,6 @@ class ThreadSafeMap {
   }
 };
 
-
 class ScopedTimer {
   using clock = std::chrono::steady_clock;
   using time_format = std::chrono::milliseconds;
@@ -163,7 +162,7 @@ class ScopedTimer {
     return std::chrono::duration_cast<time_format>(clock::now() - this->_start);
   }
 };
-
+// clang-format off
 #include <wsserver.h>
 #include <encode.h>
 #include <camera.h>

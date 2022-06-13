@@ -9,8 +9,8 @@
 #define _SERVER_H_
 
 #include <common.h>
-
 #include <sys/un.h>
+
 #include <thread>
 
 void socket_main_thread(
@@ -30,4 +30,4 @@ void socket_client_thread(
     std::shared_ptr<CameraManager> cameramgr,
     std::atomic<bool> &shutdown_requested);
 
-#endif // _SERVER_H_
+#endif  // _SERVER_H_
