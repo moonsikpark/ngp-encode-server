@@ -1,67 +1,61 @@
 // Copyright (c) 2022 Moonsik Park.
+
 #ifndef NES_BASE_RENDERED_FRAME_
 #define NES_BASE_RENDERED_FRAME_
 
 #include "base/video/type_managers.h"
 #include "nes.pb.h"
 
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/imgutils.h>
-#include <libswscale/swscale.h>
-}
-
+// RenderedFrame stores all information related to an uncompressed frame. It is
+// created with a raw RGB image stored in m_source_avframe. The RGB image buffer
+// should be visible to other programs to make modifications such as overlaying
+// texts. It converts the RGB image to YUV image using swscale and stores it in
+// m_converted_avframe. After the image is ready, the program provides the
+// converted image to the encoder.
 class RenderedFrame {
  public:
   RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt,
                 std::shared_ptr<types::AVCodecContextManager> ctxmgr)
       : m_frame_response(frame),
         m_pix_fmt(pix_fmt),
-        m_processed(false),
-        m_avframe(
-            types::AVFrameManager::FrameContext(ctxmgr->get_codec_info())) {}
+        m_converted(false),
+        m_source_avframe(types::FrameManager::FrameContext(
+                             m_frame_response.camera().width(),
+                             m_frame_response.camera().height(), pix_fmt),
+                         (uint8_t *)m_frame_response.frame().data()),
+        m_converted_avframe(
+            types::FrameManager::FrameContext(ctxmgr->get_codec_info())) {}
 
-  void convert_frame();
-
-  const uint64_t index() const { return this->m_frame_response.index(); }
-
-  uint8_t *buffer() { return (uint8_t *)this->m_frame_response.frame().data(); }
-
-  const uint32_t width() const {
-    return this->m_frame_response.camera().width();
+  // Convert frame stored in m_source_avframe from RGB to YUV and store it in
+  // m_converted_avframe.
+  inline void convert_frame() {
+    if (m_converted) {
+      throw std::runtime_error{"Tried to convert a converted RenderedFrame."};
+    }
+    types::SwsContextManager sws_context(m_source_avframe, m_converted_avframe);
+    m_converted = true;
   }
 
-  const uint32_t height() const {
-    return this->m_frame_response.camera().height();
-  }
+  // Index of the frame.
+  const inline uint64_t index() const { return this->m_frame_response.index(); }
 
-  const nesproto::Camera get_cam() const {
+  // Camera FOV and coordinate of the frame.
+  const inline nesproto::Camera get_cam() const {
     return this->m_frame_response.camera();
   }
 
-  uint8_t *processed_data() {
-    if (!m_processed) {
-      throw std::runtime_error{
-          "Tried to access processed_data from not processed RenderedFrame."};
-    }
+  // Raw RGB frame.
+  inline types::FrameManager &source_frame() { return m_source_avframe; }
 
-    return m_avframe.data().data[0];
-  }
-
-  int *processed_linesize() {
-    if (!m_processed) {
-      throw std::runtime_error{
-          "Tried to access processed_linesize from not "
-          "processed RenderedFrame."};
-    }
-    return m_avframe.data().linesize;
-  }
+  // Converted YUV frame.
+  inline types::FrameManager &converted_frame() { return m_converted_avframe; }
 
  private:
   nesproto::RenderedFrame m_frame_response;
-  types::AVFrameManager m_avframe;
+  types::FrameManager m_source_avframe;
+  types::FrameManager m_converted_avframe;
   AVPixelFormat m_pix_fmt;
-  bool m_processed;
+  bool m_converted;
 };
 
 #endif  // NES_BASE_RENDERED_FRAME_

@@ -3,16 +3,22 @@
 #include "base/video/type_managers.h"
 
 extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/imgutils.h>  // av_image_alloc()
-#include <libswscale/swscale.h>  // sws_getContext()
+#include "libavcodec/avcodec.h"
+// avcodec_free_context(), avcodec_find_encoder(), avcodec_alloc_context3(),
+// avcodec_open2(), avcodec_send_frame(), avcodec_receive_packet(),
+// avcodec_free_context()
+#include "libavutil/dict.h"      // av_dict_set()
+#include "libavutil/error.h"     // av_strerror()
+#include "libavutil/imgutils.h"  // av_image_alloc(), av_image_get_linesize()
+#include "libavutil/mem.h"       // av_freep()
+#include "libavutil/opt.h"       // av_opt_set()
+#include "libswscale/swscale.h"  // sws_getContext(), sws_scale()
 }
 
 namespace types {
 
 constexpr int kAVErrorExplainBufferLength = 200;
 
-// Turn AVError errnum to a human-readable error string.
 std::string averror_explain(int errnum) {
   char errbuf[kAVErrorExplainBufferLength];
   if (av_strerror(errnum, errbuf, kAVErrorExplainBufferLength) < 0) {
@@ -63,7 +69,7 @@ void AVCodecContextManager::codec_ctx_init() {
 
   {
     AVDictionaryManager dict;
-    AVDictionary *options = dict.get();
+    AVDictionary *options = dict();
     av_dict_set(&options, "preset", m_info.x264_encode_preset.c_str(), 0);
     av_dict_set(&options, "tune", m_info.x264_encode_tune.c_str(), 0);
 
@@ -89,31 +95,36 @@ void AVCodecContextManager::change_resolution(unsigned width, unsigned height) {
 
 int AVCodecContextManager::send_frame(AVFrame *frm) {
   unique_lock lock{m_codec_context_mutex};
-  m_codec_context_waiter.wait(lock);
-  return avcodec_send_frame(m_ctx, frm);
+  m_codec_context_waiter.wait(lock, [] { return true; });
+  int ret = avcodec_send_frame(m_ctx, frm);
+  m_codec_context_waiter.notify_one();
+  return ret;
 }
+
 int AVCodecContextManager::receive_packet(AVPacket *pkt) {
   unique_lock lock{m_codec_context_mutex};
-  m_codec_context_waiter.wait(lock);
-  return avcodec_receive_packet(m_ctx, pkt);
+  m_codec_context_waiter.wait(lock, [] { return true; });
+  int ret = avcodec_receive_packet(m_ctx, pkt);
+  m_codec_context_waiter.notify_one();
+  return ret;
 }
 
 AVCodecContextManager::~AVCodecContextManager() {
   avcodec_free_context(&m_ctx);
 }
 
-AVFrameManager::AVFrameManager(FrameContext context, uint8_t *buffer)
+FrameManager::FrameManager(FrameContext context, uint8_t *buffer)
     : m_context(context) {
   if (buffer == nullptr) {
     if (int ret = av_image_alloc(m_data.data, m_data.linesize, context.width,
                                  context.height, context.pix_fmt,
-                                 kBufferSizeAlignValue);
+                                 kBufferSizeAlignValueBytes);
         ret < 0) {
       std::runtime_error{std::string("Failed to allocate frame data: ") +
                          averror_explain(ret)};
     }
   } else {
-    m_free_buffer = false;
+    m_should_free_buffer = false;
     const AVPixFmtDescriptor *in_pixfmt = av_pix_fmt_desc_get(context.pix_fmt);
     for (int plane = 0; plane < in_pixfmt->nb_components; plane++) {
       m_data.linesize[plane] =
@@ -123,14 +134,13 @@ AVFrameManager::AVFrameManager(FrameContext context, uint8_t *buffer)
   }
 }
 
-AVFrameManager::~AVFrameManager() {
-  if (m_free_buffer) {
+FrameManager::~FrameManager() {
+  if (m_should_free_buffer) {
     av_freep(&m_data.data[0]);
   }
 }
 
-SwsContextManager::SwsContextManager(AVFrameManager &source,
-                                     AVFrameManager &dest) {
+SwsContextManager::SwsContextManager(FrameManager &source, FrameManager &dest) {
   m_sws_ctx =
       sws_getContext(source.context().width, source.context().height,
                      source.context().pix_fmt, dest.context().width,

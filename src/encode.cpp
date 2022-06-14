@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <sstream>
 
+#include "base/camera.h"
 #include "base/video/frame_queue.h"
 #include "base/video/type_managers.h"
 
@@ -47,11 +48,9 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
         ScopedTimer timer;
         uint64_t frame_index = frame->index();
 
-        nesproto::Camera cam = frame->get_cam();
-
         std::stringstream cam_matrix;
         int idx = 0;
-        for (auto it : cam.matrix()) {
+        for (auto it : frame->get_cam().matrix()) {
           idx++;
           cam_matrix << std::fixed << std::showpos << std::setw(7)
                      << std::setprecision(5) << std::setfill('0') << it << ' ';
@@ -60,25 +59,26 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
           }
         }
         cam_matrix << std::fixed << std::showpos << std::setw(7)
-                   << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
-        cam_matrix << std::fixed << std::showpos << std::setw(7)
-                   << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
-        cam_matrix << std::fixed << std::showpos << std::setw(7)
-                   << std::setprecision(5) << std::setfill('0') << 0.f << ' ';
-        cam_matrix << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 0.f << ' '
+                   << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 0.f << ' '
+                   << std::fixed << std::showpos << std::setw(7)
+                   << std::setprecision(5) << std::setfill('0') << 0.f << ' '
+                   << std::fixed << std::showpos << std::setw(7)
                    << std::setprecision(5) << std::setfill('0') << 1.f << ' ';
 
         etctx->render_string_to_frame(
-            frame, EncodeTextContext::RenderPositionOption::LEFT_BOTTOM,
-            std::string("index=") + std::to_string(frame_index));
+            frame->source_frame(),
+            EncodeTextContext::RenderPositionOption::LEFT_BOTTOM,
+            std::string("index=") + std::to_string(frame->index()));
 
         etctx->render_string_to_frame(
-            frame, EncodeTextContext::RenderPositionOption::LEFT_TOP,
-            timestamp());
+            frame->source_frame(),
+            EncodeTextContext::RenderPositionOption::LEFT_TOP, timestamp());
 
         etctx->render_string_to_frame(
-            frame, EncodeTextContext::RenderPositionOption::CENTER,
-            cam_matrix.str());
+            frame->source_frame(),
+            EncodeTextContext::RenderPositionOption::CENTER, cam_matrix.str());
 
         frame->convert_frame();
 
@@ -99,65 +99,56 @@ void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                        std::shared_ptr<FrameMap> encode_queue,
                        std::atomic<bool> &shutdown_requested) {
   set_thread_name("send_frame");
-  AVFrame *frm;
   uint64_t frame_index = 0;
-  int ret;
-
-  if (!(frm = av_frame_alloc())) {
-    throw std::runtime_error{"send_frame_thread: Failed to allocate AVFrame."};
-  }
-
   while (!shutdown_requested) {
     try {
+      ScopedTimer timer;
       std::unique_ptr<RenderedFrame> processed_frame =
           encode_queue->get_delete(frame_index);
-      {
-        ScopedTimer timer;
-        {
-          types::AVCodecContextManager::CodecInfoProvider codecinfo =
-              ctxmgr->get_codec_info();
 
-          frm->format = codecinfo->pix_fmt;
-          frm->width = codecinfo->width;
-          frm->height = codecinfo->height;
-
-          if ((ret = av_image_alloc(frm->data, frm->linesize, codecinfo->width,
-                                    codecinfo->height, codecinfo->pix_fmt,
-                                    32)) < 0) {
-            throw std::runtime_error{
-              std::string(
-                  "send_frame_thread: Failed to allocate AVFrame data: ") /*+
-              averror_explain(ret)*/};
-          }
-
-          ret = av_image_fill_pointers(frm->data, codecinfo->pix_fmt,
-                                       codecinfo->height,
-                                       processed_frame->processed_data(),
-                                       processed_frame->processed_linesize());
-        }
-        // TODO: handle error codes!
-        // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
-        // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
-        ret = ctxmgr->send_frame(frm);
-        av_frame_unref(frm);
-        tlog::info() << "send_frame_thread (index=" << frame_index
-                     << "): sent frame to encoder in "
-                     << timer.elapsed().count() << " msec.";
-        frame_index++;
+      switch (ctxmgr->send_frame(
+          processed_frame->converted_frame().to_avframe().get())) {
+        case AVERROR(EINVAL):
+          // Codec not opened, it is a decoder, or requires flush.
+          std::runtime_error{
+              "Codec not opened, it is a decoder, or requires flush."};
+          break;
+        case AVERROR(ENOMEM):
+          // Failed to add packet to internal queue, or similar other errors:
+          // legitimate encoding errors.
+          std::runtime_error{
+              "Failed to add packet to internal queue, or other."};
+          break;
+        case AVERROR_EOF:
+          // The encoder has been flushed, and no new frames can be sent to it.
+          std::runtime_error{
+              "The encoder has been flushed, and no new frames can be sent to "
+              "it."};
+          break;
+        case AVERROR(EAGAIN):
+          // Input is not accepted in the current state - user must read output
+          // with avcodec_receive_packet() (once all output is read, the packet
+          // should be resent, and the call will not fail with EAGAIN).
+        default:
+          // Success.
+          break;
       }
+
+      tlog::info() << "send_frame_thread (index=" << frame_index
+                   << "): sent frame to encoder in " << timer.elapsed().count()
+                   << " msec.";
     } catch (const LockTimeout &) {
       // If the frame is not located until timeout, go to next frame.
       tlog::error() << "send_frame_thread (index=" << frame_index
                     << "): Timeout reached while waiting for frame. Skipping.";
-      frame_index++;
-      continue;
     }
+    frame_index++;
   }
 
   tlog::info() << "send_frame_thread: Shutdown requested.";
-  av_frame_unref(frm);
-  av_freep(&frm->data[0]);
-  av_frame_free(&frm);
+  // av_frame_unref(frm);
+  // av_freep(&frm->data[0]);
+  // av_frame_free(&frm);
   tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
@@ -172,7 +163,8 @@ int receive_packet_handler(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
     switch (ret) {
       case AVERROR(EAGAIN):  // output is not available in the current state -
                              // user must try to send input
-        // We must sleep here so that other threads can acquire AVCodecContext.
+        // We must sleep here so that other threads can acquire
+        // AVCodecContext.
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         break;
       case 0:
@@ -198,9 +190,9 @@ void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                            std::atomic<bool> &shutdown_requested) {
   set_thread_name("receive_packet");
   while (!shutdown_requested) {
-    types::AVPacketManager pktmgr;
+    types::AVPacketManager pkt;
     try {
-      if (receive_packet_handler(ctxmgr, pktmgr.get(), mctx,
+      if (receive_packet_handler(ctxmgr, pkt(), mctx,
                                  std::ref(shutdown_requested)) < 0) {
         shutdown_requested = true;
       }

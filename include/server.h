@@ -13,7 +13,9 @@
 
 #include <thread>
 
+#include "base/camera.h"
 #include "base/video/frame_queue.h"
+
 void socket_main_thread(std::vector<std::string> renderers,
                         std::shared_ptr<FrameQueue> frame_queue,
                         std::atomic<std::uint64_t> &frame_index,

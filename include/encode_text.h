@@ -52,14 +52,12 @@ class EncodeTextContext {
           std::string(FT_Error_String(ret))};
     }
   }
-  void render_string_to_frame(std::unique_ptr<RenderedFrame> &frame,
+  void render_string_to_frame(types::FrameManager &frame,
                               EncodeTextContext::RenderPositionOption opt,
                               std::string content) {
-    // TODO: render to frame *after* it's done with libswscale.
-
-    uint8_t *surface = frame->buffer();
-    uint32_t width = frame->width();
-    uint32_t height = frame->height();
+    uint8_t *surface = frame.data().data[0];
+    uint32_t width = frame.context().width;
+    uint32_t height = frame.context().height;
     FT_Error ret;
     FT_GlyphSlot slot = _face->glyph;
     FT_UInt glyph_index;

@@ -44,7 +44,7 @@ void set_thread_name(std::string name);
 #include <wsserver.h>
 #include <encode.h>
 
-#include <camera.h>
+#include "base/camera.h"
 #include <encode_text.h>
 #include <muxing.h>
 #include <server.h>

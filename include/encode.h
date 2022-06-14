@@ -8,20 +8,9 @@
 #ifndef _ENCODE_H_
 #define _ENCODE_H_
 
-// std::string averror_explain(int err) {
-//  char errbuf[500];
-//  if (av_strerror(err, errbuf, 500) < 0) {
-//    return std::string("<Failed to get error message>");
-//  }
-// return std::string(" ㄹㄷㄱㄹㄷㄱㄹㄷㄱㄹㄱㄷ");
-//  return std::string(errbuf);
-//}
-
 extern "C" {
 #include <libavutil/pixdesc.h>
 }
-
-// std::string averror_explain(int err);
 
 #include <encode_text.h>
 #include <muxing.h>

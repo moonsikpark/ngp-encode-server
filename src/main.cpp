@@ -12,6 +12,7 @@
 #include <csignal>
 #include <thread>
 
+#include "base/camera.h"
 #include "base/video/frame_queue.h"
 #include "base/video/type_managers.h"
 using namespace args;

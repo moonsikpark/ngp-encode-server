@@ -5,6 +5,7 @@
 
 #include <exception>
 
+// Timeout reached while waiting for a lock.
 class LockTimeout : public std::exception {
   virtual const char *what() const throw() {
     return "Waiting for lock timed out.";

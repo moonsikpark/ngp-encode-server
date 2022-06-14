@@ -1,8 +1,8 @@
 #
-#  Copyright (c) Moonsik Park. All rights reserved.
+# Copyright (c) Moonsik Park. All rights reserved.
 #
-#  @file   CMakeLists.txt
-#  @author Moonsik Park, Korea Institute of Science and Technology
+# @file   CMakeLists.txt
+# @author Moonsik Park, Korea Institute of Science and Technology
 #
 
 cmake_minimum_required(VERSION 3.19)
@@ -15,7 +15,7 @@ PROJECT(ngp-encode-server
 
 set(NES_VERSION "${CMAKE_PROJECT_VERSION}")
 
-if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 	message(STATUS "No release type specified. Setting to 'Release'.")
 	set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
@@ -66,7 +66,6 @@ set(SOURCES
 	src/base/video/frame_queue.cc
 	src/base/video/frame_map.cc
 	src/base/video/type_managers.cc
-	src/base/video/rendered_frame.cc
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
