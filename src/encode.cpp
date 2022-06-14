@@ -12,6 +12,9 @@
 #include <iomanip>
 #include <sstream>
 
+#include "base/video/frame_queue.h"
+#include "base/video/type_managers.h"
+
 std::string timestamp() {
   using namespace std::chrono;
   using clock = system_clock;
@@ -29,23 +32,11 @@ std::string timestamp() {
   return stream.str();
 }
 
-std::string averror_explain(int err) {
-  char errbuf[500];
-  if (av_strerror(err, errbuf, 500) < 0) {
-    return std::string("<Failed to get error message>");
-  }
-
-  return std::string(errbuf);
-}
-
-void process_frame_thread(
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<AVCodecContextManager> ctxmgr,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue,
-    std::shared_ptr<EncodeTextContext> etctx,
-    std::atomic<bool> &shutdown_requested) {
+void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                          std::shared_ptr<FrameQueue> frame_queue,
+                          std::shared_ptr<FrameMap> encode_queue,
+                          std::shared_ptr<EncodeTextContext> etctx,
+                          std::atomic<bool> &shutdown_requested) {
   set_thread_name("process_frame");
   int ret;
 
@@ -89,14 +80,14 @@ void process_frame_thread(
             frame, EncodeTextContext::RenderPositionOption::CENTER,
             cam_matrix.str());
 
-        frame->convert_frame(veparams);
+        frame->convert_frame();
 
         encode_queue->insert(frame_index, std::move(frame));
         tlog::info() << "process_frame_thread (index=" << frame_index
                      << "): processed frame in " << timer.elapsed().count()
                      << " msec.";
       }
-    } catch (const lock_timeout &) {
+    } catch (const LockTimeout &) {
       continue;
     }
   }
@@ -104,11 +95,9 @@ void process_frame_thread(
   tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<AVCodecContextManager> ctxmgr,
-    std::shared_ptr<ThreadSafeMap<RenderedFrame>> encode_queue,
-    std::atomic<bool> &shutdown_requested) {
+void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                       std::shared_ptr<FrameMap> encode_queue,
+                       std::atomic<bool> &shutdown_requested) {
   set_thread_name("send_frame");
   AVFrame *frm;
   uint64_t frame_index = 0;
@@ -121,43 +110,42 @@ void send_frame_thread(
   while (!shutdown_requested) {
     try {
       std::unique_ptr<RenderedFrame> processed_frame =
-          encode_queue->pop_el(frame_index);
+          encode_queue->get_delete(frame_index);
       {
         ScopedTimer timer;
-
-        frm->format = veparams->pix_fmt();
-        frm->width = processed_frame->width();
-        frm->height = processed_frame->height();
-
-        if ((ret = av_image_alloc(
-                 frm->data, frm->linesize, processed_frame->width(),
-                 processed_frame->height(), veparams->pix_fmt(), 32)) < 0) {
-          throw std::runtime_error{
-              std::string(
-                  "send_frame_thread: Failed to allocate AVFrame data: ") +
-              averror_explain(ret)};
-        }
-
-        ret = av_image_fill_pointers(frm->data, veparams->pix_fmt(),
-                                     processed_frame->height(),
-                                     processed_frame->processed_data(),
-                                     processed_frame->processed_linesize());
         {
-          std::unique_lock<std::mutex> lock(ctxmgr->get_mutex());
-          AVCodecContext *ctx = ctxmgr->get_context();
+          types::AVCodecContextManager::CodecInfoProvider codecinfo =
+              ctxmgr->get_codec_info();
 
-          // TODO: handle error codes!
-          // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
-          // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
-          ret = avcodec_send_frame(ctx, frm);
+          frm->format = codecinfo->pix_fmt;
+          frm->width = codecinfo->width;
+          frm->height = codecinfo->height;
+
+          if ((ret = av_image_alloc(frm->data, frm->linesize, codecinfo->width,
+                                    codecinfo->height, codecinfo->pix_fmt,
+                                    32)) < 0) {
+            throw std::runtime_error{
+              std::string(
+                  "send_frame_thread: Failed to allocate AVFrame data: ") /*+
+              averror_explain(ret)*/};
+          }
+
+          ret = av_image_fill_pointers(frm->data, codecinfo->pix_fmt,
+                                       codecinfo->height,
+                                       processed_frame->processed_data(),
+                                       processed_frame->processed_linesize());
         }
+        // TODO: handle error codes!
+        // https://blogs.gentoo.org/lu_zero/2016/03/29/new-avcodec-api/
+        // https://ffmpeg.org/doxygen/trunk/group__lavc__decoding.html#ga9395cb802a5febf1f00df31497779169
+        ret = ctxmgr->send_frame(frm);
         av_frame_unref(frm);
         tlog::info() << "send_frame_thread (index=" << frame_index
                      << "): sent frame to encoder in "
                      << timer.elapsed().count() << " msec.";
         frame_index++;
       }
-    } catch (const lock_timeout &) {
+    } catch (const LockTimeout &) {
       // If the frame is not located until timeout, go to next frame.
       tlog::error() << "send_frame_thread (index=" << frame_index
                     << "): Timeout reached while waiting for frame. Skipping.";
@@ -173,19 +161,13 @@ void send_frame_thread(
   tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
-int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr,
+int receive_packet_handler(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                            AVPacket *pkt, std::shared_ptr<MuxingContext> mctx,
                            std::atomic<bool> &shutdown_requested) {
   int ret;
 
   while (!shutdown_requested) {
-    {
-      // The lock must be in this scope so that it would be unlocked right after
-      // avcodec_receive_packet() returns.
-      std::unique_lock<std::mutex> lock(ctxmgr->get_mutex());
-      AVCodecContext *ctx = ctxmgr->get_context();
-      ret = avcodec_receive_packet(ctx, pkt);
-    }
+    ret = ctxmgr->receive_packet(pkt);
 
     switch (ret) {
       case AVERROR(EAGAIN):  // output is not available in the current state -
@@ -199,8 +181,9 @@ int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr,
       case AVERROR(EINVAL):  // codec not opened, or it is a decoder other
                              // errors: legitimate encoding errors
       default:
-        tlog::error() << "receive_packet_handler: Failed to receive packet: "
-                      << averror_explain(ret);
+        tlog::error() << "receive_packet_handler: Failed to receive "
+                         "packet: "
+            /* << averror_explain(ret)*/;
       case AVERROR_EOF:  // the encoder has been fully flushed, and there will
                          // be no more output packets
         return -1;
@@ -210,18 +193,18 @@ int receive_packet_handler(std::shared_ptr<AVCodecContextManager> ctxmgr,
   return -1;
 }
 
-void receive_packet_thread(std::shared_ptr<AVCodecContextManager> ctxmgr,
+void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                            std::shared_ptr<MuxingContext> mctx,
                            std::atomic<bool> &shutdown_requested) {
   set_thread_name("receive_packet");
   while (!shutdown_requested) {
-    AVPacketManager pktmgr;
+    types::AVPacketManager pktmgr;
     try {
       if (receive_packet_handler(ctxmgr, pktmgr.get(), mctx,
                                  std::ref(shutdown_requested)) < 0) {
         shutdown_requested = true;
       }
-    } catch (const lock_timeout &) {
+    } catch (const LockTimeout &) {
       tlog::info() << "receive_packet_thread: lock_timeout while acquiring "
                       "resource lock for AVCodecContext.";
       break;

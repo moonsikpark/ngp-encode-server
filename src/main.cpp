@@ -12,6 +12,8 @@
 #include <csignal>
 #include <thread>
 
+#include "base/video/frame_queue.h"
+#include "base/video/type_managers.h"
 using namespace args;
 
 namespace {
@@ -158,23 +160,13 @@ int main(int argc, char **argv) {
       return 0;
     }
 
-    // FIXME: Should we support variable resolution?
-    /*
-     * TODO: Currently, we get rendered views from ngp with this width and
-     * height value. However, the below values should only matter with this
-     * program's output resolution. Views rendered from ngp should vary in size,
-     * optimized for speed.
-     */
-
-    auto veparams = std::make_shared<VideoEncodingParams>(
-        get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag),
-        AV_PIX_FMT_YUV420P);
-
     tlog::info() << "Initalizing encoder.";
-    auto ctxmgr = std::make_shared<AVCodecContextManager>(
-        AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
-        get(encode_tune_flag), get(width_flag), get(height_flag),
-        get(bitrate_flag), get(fps_flag), get(keyint_flag));
+
+    auto ctxmgr = std::make_shared<types::AVCodecContextManager>(
+        types::AVCodecContextManager::CodecInitInfo(
+            AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
+            get(encode_tune_flag), get(width_flag), get(height_flag),
+            get(bitrate_flag), get(fps_flag), get(keyint_flag)));
 
     tlog::info() << "Initializing text renderer.";
     auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
@@ -185,9 +177,8 @@ int main(int argc, char **argv) {
     mctx->start();
 
     tlog::info() << "Initalizing queue.";
-    auto frame_queue =
-        std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
-    auto encode_queue = std::make_shared<ThreadSafeMap<RenderedFrame>>(100);
+    auto frame_queue = std::make_shared<FrameQueue>();
+    auto encode_queue = std::make_shared<FrameMap>();
     auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag),
                                                      get(height_flag));
 
@@ -202,14 +193,13 @@ int main(int argc, char **argv) {
 
     std::vector<std::thread> threads;
 
-    std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag),
-                                    frame_queue, std::ref(frame_index),
-                                    veparams, cameramgr,
-                                    std::ref(shutdown_requested));
+    std::thread _socket_main_thread(
+        socket_main_thread, get(renderer_addr_flag), frame_queue,
+        std::ref(frame_index), cameramgr, ctxmgr, std::ref(shutdown_requested));
     threads.push_back(std::move(_socket_main_thread));
 
-    std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr,
-                                      frame_queue, encode_queue, etctx,
+    std::thread _process_frame_thread(process_frame_thread, ctxmgr, frame_queue,
+                                      encode_queue, etctx,
                                       std::ref(shutdown_requested));
     threads.push_back(std::move(_process_frame_thread));
 
@@ -217,8 +207,8 @@ int main(int argc, char **argv) {
                                        std::ref(shutdown_requested));
     threads.push_back(std::move(_receive_packet_thread));
 
-    std::thread _send_frame_thread(send_frame_thread, veparams, ctxmgr,
-                                   encode_queue, std::ref(shutdown_requested));
+    std::thread _send_frame_thread(send_frame_thread, ctxmgr, encode_queue,
+                                   std::ref(shutdown_requested));
     threads.push_back(std::move(_send_frame_thread));
 
     std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index),

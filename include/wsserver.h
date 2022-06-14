@@ -51,13 +51,13 @@ class WebSocketServer {
     m_server.set_reuse_addr(true);
 
     m_server.set_open_handler([&](websocketpp::connection_hdl hdl) {
-      this->m_connections.insert(hdl);
+      m_connections.insert(hdl);
       tlog::success() << m_server_name << "(" << m_bind_port
                       << "): Accepted client connection.";
     });
 
     m_server.set_close_handler([&](websocketpp::connection_hdl hdl) {
-      this->m_connections.erase(hdl);
+      m_connections.erase(hdl);
       tlog::warning() << m_server_name << "(" << m_bind_port
                       << "): Client connection closed.";
     });

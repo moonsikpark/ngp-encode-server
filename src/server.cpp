@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "base/video/frame_queue.h"
+
 int socket_send_blocking(int targetfd, uint8_t *buf, size_t size) {
   ssize_t ret;
   ssize_t sent = 0;
@@ -103,14 +105,11 @@ std::string socket_receive_blocking_lpf(int targetfd) {
   return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_client_thread(
-    int targetfd,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested) {
+void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
+                          std::atomic<std::uint64_t> &frame_index,
+                          std::shared_ptr<CameraManager> cameramgr,
+                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                          std::atomic<bool> &shutdown_requested) {
   set_thread_name(std::string("socket_client=") + std::to_string(targetfd));
   int ret = 0;
   tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
@@ -126,8 +125,6 @@ void socket_client_thread(
 
     // HACK: set this with correct res when we replace AVCodecContext.
     req.set_index(frame_index.fetch_add(1));
-    // req.set_width(veparams->width());
-    // req.set_height(veparams->height());
     // set_allocated_* destroys the object.
     req.mutable_camera()->CopyFrom(cameramgr->get_camera());
 
@@ -158,12 +155,12 @@ void socket_client_thread(
 
     // Create a new RenderedFrame.
     std::unique_ptr<RenderedFrame> frame_o =
-        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_RGB24);
+        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_RGB24, ctxmgr);
 
     try {
       // Push the frame to the frame queue.
       frame_queue->push(std::move(frame_o));
-    } catch (const lock_timeout &) {
+    } catch (const LockTimeout &) {
       // It takes too much time to acquire a lock of frame_queue. Drop the
       // frame. BUG: If we drop the frame, the program will hang and look for
       // the frame.
@@ -176,14 +173,12 @@ void socket_client_thread(
                << "): Exiting thread.";
 }
 
-void socket_manage_thread(
-    std::string renderer,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested) {
+void socket_manage_thread(std::string renderer,
+                          std::shared_ptr<FrameQueue> frame_queue,
+                          std::atomic<std::uint64_t> &frame_index,
+                          std::shared_ptr<CameraManager> cameramgr,
+                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                          std::atomic<bool> &shutdown_requested) {
   set_thread_name(std::string("socket_manage=") + renderer);
   int error_times = 0;
   while (!shutdown_requested) {
@@ -230,8 +225,8 @@ void socket_manage_thread(
                     << "): Connected to " << renderer;
 
     std::thread _socket_client_thread(socket_client_thread, fd, frame_queue,
-                                      std::ref(frame_index), veparams,
-                                      cameramgr, std::ref(shutdown_requested));
+                                      std::ref(frame_index), cameramgr, ctxmgr,
+                                      std::ref(shutdown_requested));
 
     _socket_client_thread.join();
 
@@ -242,14 +237,12 @@ void socket_manage_thread(
   }
 }
 
-void socket_main_thread(
-    std::vector<std::string> renderers,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested) {
+void socket_main_thread(std::vector<std::string> renderers,
+                        std::shared_ptr<FrameQueue> frame_queue,
+                        std::atomic<std::uint64_t> &frame_index,
+                        std::shared_ptr<CameraManager> cameramgr,
+                        std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                        std::atomic<bool> &shutdown_requested) {
   set_thread_name("socket_main");
   std::vector<std::thread> threads;
 
@@ -257,7 +250,7 @@ void socket_main_thread(
 
   for (const auto renderer : renderers) {
     threads.push_back(std::thread(socket_manage_thread, renderer, frame_queue,
-                                  std::ref(frame_index), veparams, cameramgr,
+                                  std::ref(frame_index), cameramgr, ctxmgr,
                                   std::ref(shutdown_requested)));
   }
 

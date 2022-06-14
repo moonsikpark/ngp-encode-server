@@ -30,19 +30,18 @@ class EncodeTextContext {
   };
   EncodeTextContext(std::string font_location) {
     FT_Error ret;
-    if ((ret = FT_Init_FreeType(&this->_library)) < 0) {
+    if ((ret = FT_Init_FreeType(&_library)) < 0) {
       throw std::runtime_error{
           std::string("EncodeTextContext: Failed to init freetype: ") +
           std::string(FT_Error_String(ret))};
     }
 
-    if ((ret = FT_New_Face(this->_library, font_location.c_str(), 0,
-                           &this->_face)) < 0) {
+    if ((ret = FT_New_Face(_library, font_location.c_str(), 0, &_face)) < 0) {
       throw std::runtime_error{
           std::string("EncodeTextContext: Failed to init font face: ") +
           std::string(FT_Error_String(ret))};
     }
-    if ((ret = FT_Set_Char_Size(this->_face, /* handle to face object */
+    if ((ret = FT_Set_Char_Size(_face,   /* handle to face object */
                                 0,       /* char_width in 1/64th of points  */
                                 20 * 64, /* char_height in 1/64th of points */
                                 0,       /* horizontal device resolution    */
@@ -62,7 +61,7 @@ class EncodeTextContext {
     uint32_t width = frame->width();
     uint32_t height = frame->height();
     FT_Error ret;
-    FT_GlyphSlot slot = this->_face->glyph;
+    FT_GlyphSlot slot = _face->glyph;
     FT_UInt glyph_index;
 
     int pen_x, pen_y, n;
@@ -106,7 +105,7 @@ class EncodeTextContext {
         continue;
       }
       /* load glyph image into the slot (erase previous one) */
-      ret = FT_Load_Char(this->_face, ch, FT_LOAD_RENDER);
+      ret = FT_Load_Char(_face, ch, FT_LOAD_RENDER);
       if (ret) {
         tlog::info() << "Error while rendering character=" << ch
                      << " error=" << ret;
@@ -131,7 +130,7 @@ class EncodeTextContext {
     }
   }
 
-  ~EncodeTextContext() { FT_Done_FreeType(this->_library); }
+  ~EncodeTextContext() { FT_Done_FreeType(_library); }
 };
 
 #endif  // _ENCODE_TEXT_H_

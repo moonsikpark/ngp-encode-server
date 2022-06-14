@@ -15,54 +15,54 @@ class CameraManager {
   nesproto::Camera _camera;
   std::condition_variable _wait;
   std::mutex _mutex;
-  std::shared_ptr<AVCodecContextManager> _ctxmgr;
+  std::shared_ptr<types::AVCodecContextManager> _ctxmgr;
 
   using unique_lock = std::unique_lock<std::mutex>;
 
  public:
-  CameraManager(std::shared_ptr<AVCodecContextManager> ctxmgr,
+  CameraManager(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                 uint32_t default_width, uint32_t default_height)
       : _ctxmgr(ctxmgr) {
     // Set default transformation matrix, width and height
     float init[] = {1.0f, 0.0f, 0.0f, 0.5f, 0.0f,  -1.0f,
                     0.0f, 0.5f, 0.0f, 0.0f, -1.0f, 0.5f};
-    *this->_camera.mutable_matrix() = {init, init + 12};
-    this->_camera.set_width(default_width);
-    this->_camera.set_height(default_height);
+    *_camera.mutable_matrix() = {init, init + 12};
+    _camera.set_width(default_width);
+    _camera.set_height(default_height);
   }
   void set_camera(nesproto::Camera camera) {
-    // unique_lock lock(this->_mutex);
+    // unique_lock lock(m_mutex);
     // XXX: Is it okay to not wait for the conditional_variable??
 
     // Resolution has changed. Reset the encoder.
-    if (this->_camera.width() != camera.width() ||
-        this->_camera.height() != camera.height()) {
-      this->_ctxmgr->codec_setup(camera.width(), camera.height());
+    if (_camera.width() != camera.width() ||
+        _camera.height() != camera.height()) {
+      _ctxmgr->change_resolution(camera.width(), camera.height());
     }
-    this->_camera = camera;
+    _camera = camera;
   }
 
   nesproto::Camera get_camera() {
-    // unique_lock lock(this->_mutex);
-    return this->_camera;
+    // unique_lock lock(m_mutex);
+    return _camera;
   }
 };
 
 class CameraControlServer : public WebSocketServer {
  private:
-  std::shared_ptr<CameraManager> m_cameramgr;
+  std::shared_ptr<CameraManager> _cameramgr;
 
  public:
   CameraControlServer(std::shared_ptr<CameraManager> cameramgr,
                       uint16_t bind_port)
       : WebSocketServer(std::string("CameraControlServer"), bind_port),
-        m_cameramgr(cameramgr) {}
+        _cameramgr(cameramgr) {}
 
   void message_handler(websocketpp::connection_hdl hdl, message_ptr msg) {
     nesproto::Camera cam;
 
     if (cam.ParseFromString(msg->get_raw_payload())) {
-      m_cameramgr->set_camera(cam);
+      _cameramgr->set_camera(cam);
       tlog::success() << "CameraControlServer: Got Camera matrix.";
     } else {
       tlog::error() << "CameraControlServer: Failed to set camera matrix.";

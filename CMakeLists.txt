@@ -63,6 +63,10 @@ set(SOURCES
 	src/encode.cpp
 	src/server.cpp
 	src/main.cpp
+	src/base/video/frame_queue.cc
+	src/base/video/frame_map.cc
+	src/base/video/type_managers.cc
+	src/base/video/rendered_frame.cc
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
