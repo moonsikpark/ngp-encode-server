@@ -5,15 +5,19 @@
  *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
 
-#include <common.h>
-
 #include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <thread>
 
-#include "base/camera.h"
+#include "base/camera_manager.h"
+#include "base/exceptions/lock_timeout.h"
+#include "base/scoped_timer.h"
+#include "base/server/packet_stream.h"
+#include "base/video/frame_map.h"
 #include "base/video/frame_queue.h"
+#include "base/video/render_text.h"
 #include "base/video/type_managers.h"
 
 std::string timestamp() {
@@ -36,9 +40,9 @@ std::string timestamp() {
 void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                           std::shared_ptr<FrameQueue> frame_queue,
                           std::shared_ptr<FrameMap> encode_queue,
-                          std::shared_ptr<EncodeTextContext> etctx,
+                          std::shared_ptr<RenderTextContext> etctx,
                           std::atomic<bool> &shutdown_requested) {
-  set_thread_name("process_frame");
+  // set_thread_name("process_frame");
   int ret;
 
   while (!shutdown_requested) {
@@ -69,16 +73,18 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 
         etctx->render_string_to_frame(
             frame->source_frame(),
-            EncodeTextContext::RenderPositionOption::LEFT_BOTTOM,
+            RenderTextContext::RenderPosition::RENDER_POSITION_LEFT_BOTTOM,
             std::string("index=") + std::to_string(frame->index()));
 
         etctx->render_string_to_frame(
             frame->source_frame(),
-            EncodeTextContext::RenderPositionOption::LEFT_TOP, timestamp());
+            RenderTextContext::RenderPosition::RENDER_POSITION_LEFT_TOP,
+            timestamp());
 
         etctx->render_string_to_frame(
             frame->source_frame(),
-            EncodeTextContext::RenderPositionOption::CENTER, cam_matrix.str());
+            RenderTextContext::RenderPosition::RENDER_POSITION_CENTER,
+            cam_matrix.str());
 
         frame->convert_frame();
 
@@ -98,7 +104,7 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                        std::shared_ptr<FrameMap> encode_queue,
                        std::atomic<bool> &shutdown_requested) {
-  set_thread_name("send_frame");
+  // set_thread_name("send_frame");
   uint64_t frame_index = 0;
   while (!shutdown_requested) {
     try {
@@ -153,7 +159,8 @@ void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 }
 
 int receive_packet_handler(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                           AVPacket *pkt, std::shared_ptr<MuxingContext> mctx,
+                           AVPacket *pkt,
+                           std::shared_ptr<PacketStreamServer> mctx,
                            std::atomic<bool> &shutdown_requested) {
   int ret;
 
@@ -186,9 +193,9 @@ int receive_packet_handler(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 }
 
 void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                           std::shared_ptr<MuxingContext> mctx,
+                           std::shared_ptr<PacketStreamServer> mctx,
                            std::atomic<bool> &shutdown_requested) {
-  set_thread_name("receive_packet");
+  // set_thread_name("receive_packet");
   while (!shutdown_requested) {
     types::AVPacketManager pkt;
     try {
@@ -210,7 +217,7 @@ void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 
 void encode_stats_thread(std::atomic<std::uint64_t> &frame_index,
                          std::atomic<bool> &shutdown_requested) {
-  set_thread_name("encode_stats");
+  // set_thread_name("encode_stats");
   uint64_t previous_index = 0;
   while (!shutdown_requested) {
     uint64_t current_index = frame_index.load();

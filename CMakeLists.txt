@@ -63,9 +63,15 @@ set(SOURCES
 	src/encode.cpp
 	src/server.cpp
 	src/main.cpp
+	src/base/camera_manager.cc
+	src/base/server/camera_control.cc
+	src/base/server/packet_stream.cc
+	src/base/server/websocket_server.cc
 	src/base/video/frame_queue.cc
 	src/base/video/frame_map.cc
 	src/base/video/type_managers.cc
+	src/base/video/render_text.cc
+	src/base/video/rendered_frame.cc
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

@@ -4,17 +4,22 @@
  *  @file   main.cpp
  *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
-
-#include <common.h>
+#include <sys/prctl.h>
 
 #include <args/args.hxx>
 #include <atomic>
 #include <csignal>
 #include <thread>
 
-#include "base/camera.h"
+#include "base/camera_manager.h"
+#include "base/server/camera_control.h"
+#include "base/server/packet_stream.h"
 #include "base/video/frame_queue.h"
+#include "base/video/render_text.h"
 #include "base/video/type_managers.h"
+#include "encode.h"
+#include "server.h"
+
 using namespace args;
 
 namespace {
@@ -35,7 +40,7 @@ void signal_handler(int signum) {
 void set_thread_name(std::string name) { prctl(PR_SET_NAME, name.c_str()); }
 
 int main(int argc, char **argv) {
-  set_thread_name("main");
+  // set_thread_name("main");
   GOOGLE_PROTOBUF_VERIFY_VERSION;
   std::signal(SIGINT, signal_handler);
 
@@ -170,9 +175,9 @@ int main(int argc, char **argv) {
             get(bitrate_flag), get(fps_flag), get(keyint_flag)));
 
     tlog::info() << "Initializing text renderer.";
-    auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
+    auto etctx = std::make_shared<RenderTextContext>(get(font_flag));
 
-    tlog::info() << "Initalizing muxing context.";
+    tlog::info() << "Initalizing PacketStreamServer context.";
     auto mctx =
         std::make_shared<PacketStreamServer>(get(packet_stream_server_port));
     mctx->start();

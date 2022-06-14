@@ -8,12 +8,11 @@
 #ifndef _SERVER_H_
 #define _SERVER_H_
 
-#include <common.h>
 #include <sys/un.h>
 
 #include <thread>
 
-#include "base/camera.h"
+#include "base/camera_manager.h"
 #include "base/video/frame_queue.h"
 
 void socket_main_thread(std::vector<std::string> renderers,
