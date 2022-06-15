@@ -29,11 +29,11 @@ class AVPacketManager {
   // Allocate AVPacket using av_packet_alloc() and check return value.
   AVPacketManager();
 
-  // Access the stored AVPacket.
-  inline AVPacket *operator()() { return m_packet; }
-
   // Free AVPacket using av_packet_free().
   ~AVPacketManager();
+
+  // Access the stored AVPacket.
+  inline AVPacket *operator()() { return m_packet; }
 
  private:
   AVPacket *m_packet;
@@ -42,11 +42,11 @@ class AVPacketManager {
 // AVDictionaryManager manages creation and deletion of AVDictionary.
 class AVDictionaryManager {
  public:
-  // Access the stored AVDictionary.
-  inline AVDictionary *operator()() { return m_dict; }
-
   // Free AVDictionary using av_dict_free().
   ~AVDictionaryManager();
+
+  // Access the stored AVDictionary.
+  inline AVDictionary *operator()() { return m_dict; }
 
  private:
   // AVDictionary will be automatically allocated by av_dict_set(), no need for

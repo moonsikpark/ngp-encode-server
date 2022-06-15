@@ -20,7 +20,7 @@ class FrameQueue {
   static constexpr std::size_t kFrameQueueMaxSize = 100;
 
   // Timeout of push/pop operation.
-  static constexpr std::chrono::milliseconds kFrameQueueLockTimeout{300};
+  static constexpr std::chrono::milliseconds kFrameQueueLockTimeout{1000};
 
   using element = std::unique_ptr<RenderedFrame>;
 

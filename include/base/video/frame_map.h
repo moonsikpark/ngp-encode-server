@@ -22,7 +22,7 @@ class FrameMap {
   // Timeout waiting for insert/get of FrameMap.
   // This timeout value is important to skip frames that are taking too long
   // to render or occured an error while rendering.
-  static constexpr std::chrono::milliseconds kFrameMapLockTimeout{300};
+  static constexpr std::chrono::milliseconds kFrameMapLockTimeout{1000};
 
   // Interval of cleaning up unused Frames (i.e. frames older than the
   // requested frame).

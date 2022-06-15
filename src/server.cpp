@@ -111,6 +111,8 @@ std::string socket_receive_blocking_lpf(int targetfd) {
   return std::string(buffer.get(), buffer.get() + size);
 }
 
+static constexpr unsigned kLogStatsIntervalFrame = 100;
+
 void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
                           std::atomic<std::uint64_t> &frame_index,
                           std::shared_ptr<CameraManager> cameramgr,
@@ -119,17 +121,20 @@ void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
   // set_thread_name(std::string("socket_client=") + std::to_string(targetfd));
   int ret = 0;
   tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
+
+  uint64_t count = 0;
+  uint64_t elapsed = 0;
+
   while (!shutdown_requested) {
     if (ret < 0) {
       // If there were errors, exit the loop.
-      tlog::info() << "socket_client_thread (fd=" << targetfd
-                   << "): Error occured. Exiting.";
+      tlog::error() << "socket_client_thread (fd=" << targetfd
+                    << "): Error occured. Exiting.";
       break;
     }
 
     nesproto::FrameRequest req;
 
-    // HACK: set this with correct res when we replace AVCodecContext.
     req.set_index(frame_index.fetch_add(1));
     // set_allocated_* destroys the object.
     req.mutable_camera()->CopyFrom(cameramgr->get_camera());
@@ -154,9 +159,17 @@ void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
       } catch (const std::runtime_error &) {
         continue;
       }
-      tlog::info() << "socket_client_thread (fd=" << targetfd
-                   << "): Frame has been received in "
-                   << timer.elapsed().count() << " msec.";
+      count++;
+      elapsed += timer.elapsed().count();
+
+      if (count == kLogStatsIntervalFrame) {
+        tlog::debug() << "socket_client_thread (fd=" << targetfd
+                      << "): Frame receiving average time of "
+                      << kLogStatsIntervalFrame
+                      << " frames: " << elapsed / count << " msec.";
+        count = 0;
+        elapsed = 0;
+      }
     }
 
     // Create a new RenderedFrame.
@@ -218,7 +231,7 @@ void socket_manage_thread(std::string renderer,
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       error_times++;
-      if (error_times > 10) {
+      if (error_times > 30) {
         tlog::error() << "socket_client_thread_factory(" << renderer
                       << "): Failed to connect : " << std::strerror(errno)
                       << "; Retrying.";

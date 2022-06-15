@@ -17,9 +17,7 @@ void CameraControlServer::message_handler(websocketpp::connection_hdl hdl,
   if (cam.ParseFromString(msg->get_raw_payload())) {
     m_camera_manager->set_camera(cam);
     if (m_message_count % kReceivedLoggingInterval == 0) {
-      tlog::success()
-          << "CameraControlServer: Receiving camera matrix... count="
-          << m_message_count;
+      tlog::success() << "CameraControlServer: Receiving camera matrix...";
     }
   } else {
     tlog::error() << "CameraControlServer: Failed to set camera matrix.";

@@ -29,6 +29,7 @@ WebSocketServer::WebSocketServer(std::string server_name, uint16_t bind_port)
         message_handler(hdl, msg);
       });
 }
+
 void WebSocketServer::start() {
   if (m_running) {
     throw std::runtime_error{

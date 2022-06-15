@@ -37,6 +37,8 @@ std::string timestamp() {
   return stream.str();
 }
 
+static constexpr unsigned kLogStatsIntervalFrame = 100;
+
 void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                           std::shared_ptr<FrameQueue> frame_queue,
                           std::shared_ptr<FrameMap> encode_queue,
@@ -44,7 +46,8 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                           std::atomic<bool> &shutdown_requested) {
   // set_thread_name("process_frame");
   int ret;
-
+  unsigned index = 0;
+  uint64_t elapsed = 0;
   while (!shutdown_requested) {
     try {
       std::unique_ptr<RenderedFrame> frame = frame_queue->pop();
@@ -89,9 +92,17 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
         frame->convert_frame();
 
         encode_queue->insert(frame_index, std::move(frame));
-        tlog::info() << "process_frame_thread (index=" << frame_index
-                     << "): processed frame in " << timer.elapsed().count()
-                     << " msec.";
+        index++;
+        elapsed += timer.elapsed().count();
+
+        if (index == kLogStatsIntervalFrame) {
+          tlog::info()
+              << "process_frame_thread: frame processing average time of "
+              << kLogStatsIntervalFrame
+              << " frames: " << elapsed / kLogStatsIntervalFrame << " msec.";
+          index = 0;
+          elapsed = 0;
+        }
       }
     } catch (const LockTimeout &) {
       continue;
@@ -106,6 +117,8 @@ void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                        std::atomic<bool> &shutdown_requested) {
   // set_thread_name("send_frame");
   uint64_t frame_index = 0;
+  unsigned index = 0;
+  uint64_t elapsed = 0;
   while (!shutdown_requested) {
     try {
       ScopedTimer timer;
@@ -139,10 +152,18 @@ void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
           // Success.
           break;
       }
+      index++;
+      elapsed += timer.elapsed().count();
 
-      tlog::info() << "send_frame_thread (index=" << frame_index
-                   << "): sent frame to encoder in " << timer.elapsed().count()
-                   << " msec.";
+      if (index == kLogStatsIntervalFrame) {
+        tlog::info() << "send_frame_thread:  average time of sending frame to "
+                        "encoder of "
+                     << kLogStatsIntervalFrame
+                     << " frames: " << elapsed / kLogStatsIntervalFrame
+                     << " msec.";
+        index = 0;
+        elapsed = 0;
+      }
     } catch (const LockTimeout &) {
       // If the frame is not located until timeout, go to next frame.
       tlog::error() << "send_frame_thread (index=" << frame_index
@@ -151,10 +172,6 @@ void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
     frame_index++;
   }
 
-  tlog::info() << "send_frame_thread: Shutdown requested.";
-  // av_frame_unref(frm);
-  // av_freep(&frm->data[0]);
-  // av_frame_free(&frm);
   tlog::info() << "send_frame_thread: Exiting thread.";
 }
 
@@ -211,20 +228,28 @@ void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  tlog::info() << "receive_packet_thread: Shutdown requested.";
   tlog::info() << "receive_packet_thread: Exiting thread.";
 }
+
+static constexpr unsigned kEncodeStatsLogIntervalSeconds = 10;
 
 void encode_stats_thread(std::atomic<std::uint64_t> &frame_index,
                          std::atomic<bool> &shutdown_requested) {
   // set_thread_name("encode_stats");
   uint64_t previous_index = 0;
+  uint64_t seconds = 0;
   while (!shutdown_requested) {
+    seconds++;
     uint64_t current_index = frame_index.load();
-    tlog::info()
-        << "encode_stats_thread: Average frame rate of the last 3 seconds: "
-        << (current_index - previous_index) / 3 << " fps.";
-    previous_index = current_index;
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    if (seconds == kEncodeStatsLogIntervalSeconds) {
+      tlog::info() << "encode_stats_thread: Average frame rate of the last "
+                   << kEncodeStatsLogIntervalSeconds
+                   << " seconds: " << (current_index - previous_index) / seconds
+                   << " fps.";
+      previous_index = current_index;
+      seconds = 0;
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
+  tlog::info() << "encode_stats_thread: Exiting thread.";
 }
