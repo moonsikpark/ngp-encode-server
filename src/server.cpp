@@ -5,13 +5,20 @@
  *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
 
-#include <common.h>
-
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include <cstring>
+#include <thread>
+
+#include "base/camera_manager.h"
+#include "base/exceptions/lock_timeout.h"
+#include "base/scoped_timer.h"
+#include "base/video/frame_queue.h"
 
 int socket_send_blocking(int targetfd, uint8_t *buf, size_t size) {
   ssize_t ret;
@@ -88,8 +95,9 @@ std::string socket_receive_blocking_lpf(int targetfd) {
   // todo: silently fail, do not wail error.
   if ((ret = socket_receive_blocking(targetfd, (uint8_t *)&size,
                                      sizeof(size))) < 0) {
-    throw std::runtime_error{"socket_receive_blocking_lpf: Error while "
-                             "receiving data size from socket."};
+    throw std::runtime_error{
+        "socket_receive_blocking_lpf: Error while "
+        "receiving data size from socket."};
   }
 
   auto buffer = std::make_unique<char[]>(size);
@@ -103,32 +111,31 @@ std::string socket_receive_blocking_lpf(int targetfd) {
   return std::string(buffer.get(), buffer.get() + size);
 }
 
-void socket_client_thread(
-    int targetfd,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name(std::string("socket_client=") +
-                            std::to_string(targetfd));
+static constexpr unsigned kLogStatsIntervalFrame = 100;
+
+void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
+                          std::atomic<std::uint64_t> &frame_index,
+                          std::shared_ptr<CameraManager> cameramgr,
+                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                          std::atomic<bool> &shutdown_requested) {
+  // set_thread_name(std::string("socket_client=") + std::to_string(targetfd));
   int ret = 0;
   tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
+
+  uint64_t count = 0;
+  uint64_t elapsed = 0;
+
   while (!shutdown_requested) {
     if (ret < 0) {
       // If there were errors, exit the loop.
-      tlog::info() << "socket_client_thread (fd=" << targetfd
-                   << "): Error occured. Exiting.";
+      tlog::error() << "socket_client_thread (fd=" << targetfd
+                    << "): Error occured. Exiting.";
       break;
     }
 
     nesproto::FrameRequest req;
 
-    // HACK: set this with correct res when we replace AVCodecContext.
     req.set_index(frame_index.fetch_add(1));
-    // req.set_width(veparams->width());
-    // req.set_height(veparams->height());
     // set_allocated_* destroys the object.
     req.mutable_camera()->CopyFrom(cameramgr->get_camera());
 
@@ -152,19 +159,27 @@ void socket_client_thread(
       } catch (const std::runtime_error &) {
         continue;
       }
-      tlog::info() << "socket_client_thread (fd=" << targetfd
-                   << "): Frame has been received in "
-                   << timer.elapsed().count() << " msec.";
+      count++;
+      elapsed += timer.elapsed().count();
+
+      if (count == kLogStatsIntervalFrame) {
+        tlog::debug() << "socket_client_thread (fd=" << targetfd
+                      << "): Frame receiving average time of "
+                      << kLogStatsIntervalFrame
+                      << " frames: " << elapsed / count << " msec.";
+        count = 0;
+        elapsed = 0;
+      }
     }
 
     // Create a new RenderedFrame.
     std::unique_ptr<RenderedFrame> frame_o =
-        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_BGR8);
+        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_RGB24, ctxmgr);
 
     try {
       // Push the frame to the frame queue.
       frame_queue->push(std::move(frame_o));
-    } catch (const lock_timeout &) {
+    } catch (const LockTimeout &) {
       // It takes too much time to acquire a lock of frame_queue. Drop the
       // frame. BUG: If we drop the frame, the program will hang and look for
       // the frame.
@@ -177,15 +192,13 @@ void socket_client_thread(
                << "): Exiting thread.";
 }
 
-void socket_manage_thread(
-    std::string renderer,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name(std::string("socket_manage=") + renderer);
+void socket_manage_thread(std::string renderer,
+                          std::shared_ptr<FrameQueue> frame_queue,
+                          std::atomic<std::uint64_t> &frame_index,
+                          std::shared_ptr<CameraManager> cameramgr,
+                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                          std::atomic<bool> &shutdown_requested) {
+  // set_thread_name(std::string("socket_manage=") + renderer);
   int error_times = 0;
   while (!shutdown_requested) {
     std::stringstream renderer_parsed(renderer);
@@ -218,7 +231,7 @@ void socket_manage_thread(
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       error_times++;
-      if (error_times > 10) {
+      if (error_times > 30) {
         tlog::error() << "socket_client_thread_factory(" << renderer
                       << "): Failed to connect : " << std::strerror(errno)
                       << "; Retrying.";
@@ -231,8 +244,8 @@ void socket_manage_thread(
                     << "): Connected to " << renderer;
 
     std::thread _socket_client_thread(socket_client_thread, fd, frame_queue,
-                                      std::ref(frame_index), veparams,
-                                      cameramgr, std::ref(shutdown_requested));
+                                      std::ref(frame_index), cameramgr, ctxmgr,
+                                      std::ref(shutdown_requested));
 
     _socket_client_thread.join();
 
@@ -243,22 +256,20 @@ void socket_manage_thread(
   }
 }
 
-void socket_main_thread(
-    std::vector<std::string> renderers,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested) {
-  set_userspace_thread_name("socket_main");
+void socket_main_thread(std::vector<std::string> renderers,
+                        std::shared_ptr<FrameQueue> frame_queue,
+                        std::atomic<std::uint64_t> &frame_index,
+                        std::shared_ptr<CameraManager> cameramgr,
+                        std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                        std::atomic<bool> &shutdown_requested) {
+  // set_thread_name("socket_main");
   std::vector<std::thread> threads;
 
   tlog::info() << "socket_main_thread: Connecting to renderers.";
 
   for (const auto renderer : renderers) {
     threads.push_back(std::thread(socket_manage_thread, renderer, frame_queue,
-                                  std::ref(frame_index), veparams, cameramgr,
+                                  std::ref(frame_index), cameramgr, ctxmgr,
                                   std::ref(shutdown_requested)));
   }
 

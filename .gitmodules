@@ -4,6 +4,3 @@
 [submodule "dependencies/args"]
 	path = dependencies/args
 	url = https://github.com/Taywee/args.git
-[submodule "dependencies/json"]
-	path = dependencies/json
-	url = https://github.com/nlohmann/json.git

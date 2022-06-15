@@ -8,26 +8,24 @@
 #ifndef _SERVER_H_
 #define _SERVER_H_
 
-#include <common.h>
-
 #include <sys/un.h>
+
 #include <thread>
 
-void socket_main_thread(
-    std::vector<std::string> renderers,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested);
-void socket_client_thread(
-    int targetfd,
-    std::shared_ptr<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>
-        frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
-    std::shared_ptr<VideoEncodingParams> veparams,
-    std::shared_ptr<CameraManager> cameramgr,
-    std::atomic<bool> &shutdown_requested);
+#include "base/camera_manager.h"
+#include "base/video/frame_queue.h"
 
-#endif // _SERVER_H_
+void socket_main_thread(std::vector<std::string> renderers,
+                        std::shared_ptr<FrameQueue> frame_queue,
+                        std::atomic<std::uint64_t> &frame_index,
+                        std::shared_ptr<CameraManager> cameramgr,
+                        std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                        std::atomic<bool> &shutdown_requested);
+
+void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
+                          std::atomic<std::uint64_t> &frame_index,
+                          std::shared_ptr<CameraManager> cameramgr,
+                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+                          std::atomic<bool> &shutdown_requested);
+
+#endif  // _SERVER_H_

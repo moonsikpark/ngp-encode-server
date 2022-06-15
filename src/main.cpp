@@ -4,30 +4,46 @@
  *  @file   main.cpp
  *  @author Moonsik Park, Korea Institute of Science and Technology
  **/
+#include <sys/prctl.h>
 
+#include <args/args.hxx>
 #include <atomic>
 #include <csignal>
 #include <thread>
 
-#include <common.h>
-
-#include <args/args.hxx>
+#include "base/camera_manager.h"
+#include "base/server/camera_control.h"
+#include "base/server/packet_stream.h"
+#include "base/video/frame_queue.h"
+#include "base/video/render_text.h"
+#include "base/video/type_managers.h"
+#include "encode.h"
+#include "server.h"
 
 using namespace args;
 
+namespace {
+
+volatile std::sig_atomic_t signal_status = 0;
+
+static_assert(std::atomic<bool>::is_always_lock_free);
+
 std::atomic<bool> shutdown_requested{false};
 
-void signal_handler(int) { shutdown_requested = true; }
+}  // namespace
 
-void set_userspace_thread_name(std::string name) {
-  prctl(PR_SET_NAME, name.c_str());
+void signal_handler(int signum) {
+  signal_status = signum;
+  shutdown_requested.store(true);
 }
 
+void set_thread_name(std::string name) { prctl(PR_SET_NAME, name.c_str()); }
+
 int main(int argc, char **argv) {
-  set_userspace_thread_name("main");
+  // set_thread_name("main");
   GOOGLE_PROTOBUF_VERIFY_VERSION;
-  // TODO: Use POSIX standard sigaction(2)
-  signal(SIGINT, signal_handler);
+  std::signal(SIGINT, signal_handler);
+
   try {
     ArgumentParser parser{
         "ngp encode server\n"
@@ -103,11 +119,7 @@ int main(int argc, char **argv) {
         30,
     };
     ValueFlag<unsigned int> keyint_flag{
-        parser,
-        "KEYINT",
-        "Group of picture (GOP) size",
-        {"keyint"},
-        250,
+        parser, "KEYINT", "Group of picture (GOP) size", {"keyint"}, 250,
     };
 
     ValueFlag<std::string> font_flag{
@@ -154,38 +166,27 @@ int main(int argc, char **argv) {
       return 0;
     }
 
-    // FIXME: Should we support variable resolution?
-    /*
-     * TODO: Currently, we get rendered views from ngp with this width and
-     * height value. However, the below values should only matter with this
-     * program's output resolution. Views rendered from ngp should vary in size,
-     * optimized for speed.
-     */
-
-    auto veparams = std::make_shared<VideoEncodingParams>(
-        get(width_flag), get(height_flag), get(bitrate_flag), get(fps_flag),
-        AV_PIX_FMT_YUV420P);
-
-
     tlog::info() << "Initalizing encoder.";
-    auto ctxmgr = std::make_shared<AVCodecContextManager>(
-        AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
-        get(encode_tune_flag), get(width_flag), get(height_flag),
-        get(bitrate_flag), get(fps_flag), get(keyint_flag));
+
+    auto ctxmgr = std::make_shared<types::AVCodecContextManager>(
+        types::AVCodecContextManager::CodecInitInfo(
+            AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
+            get(encode_tune_flag), get(width_flag), get(height_flag),
+            get(bitrate_flag), get(fps_flag), get(keyint_flag)));
 
     tlog::info() << "Initializing text renderer.";
-    auto etctx = std::make_shared<EncodeTextContext>(get(font_flag));
+    auto etctx = std::make_shared<RenderTextContext>(get(font_flag));
 
-    tlog::info() << "Initalizing muxing context.";
+    tlog::info() << "Initalizing PacketStreamServer context.";
     auto mctx =
         std::make_shared<PacketStreamServer>(get(packet_stream_server_port));
     mctx->start();
 
     tlog::info() << "Initalizing queue.";
-    auto frame_queue =
-        std::make_shared<ThreadSafeQueue<std::unique_ptr<RenderedFrame>>>(100);
-    auto encode_queue = std::make_shared<ThreadSafeMap<RenderedFrame>>(100);
-    auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag), get(height_flag));
+    auto frame_queue = std::make_shared<FrameQueue>();
+    auto encode_queue = std::make_shared<FrameMap>();
+    auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag),
+                                                     get(height_flag));
 
     tlog::info() << "Initalizing camera control server.";
     auto ccsvr = std::make_shared<CameraControlServer>(
@@ -198,14 +199,13 @@ int main(int argc, char **argv) {
 
     std::vector<std::thread> threads;
 
-    std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag),
-                                    frame_queue, std::ref(frame_index),
-                                    veparams, cameramgr,
-                                    std::ref(shutdown_requested));
+    std::thread _socket_main_thread(
+        socket_main_thread, get(renderer_addr_flag), frame_queue,
+        std::ref(frame_index), cameramgr, ctxmgr, std::ref(shutdown_requested));
     threads.push_back(std::move(_socket_main_thread));
 
-    std::thread _process_frame_thread(process_frame_thread, veparams, ctxmgr,
-                                      frame_queue, encode_queue, etctx,
+    std::thread _process_frame_thread(process_frame_thread, ctxmgr, frame_queue,
+                                      encode_queue, etctx,
                                       std::ref(shutdown_requested));
     threads.push_back(std::move(_process_frame_thread));
 
@@ -213,8 +213,8 @@ int main(int argc, char **argv) {
                                        std::ref(shutdown_requested));
     threads.push_back(std::move(_receive_packet_thread));
 
-    std::thread _send_frame_thread(send_frame_thread, veparams, ctxmgr,
-                                   encode_queue, std::ref(shutdown_requested));
+    std::thread _send_frame_thread(send_frame_thread, ctxmgr, encode_queue,
+                                   std::ref(shutdown_requested));
     threads.push_back(std::move(_send_frame_thread));
 
     std::thread _encode_stats_thread(encode_stats_thread, std::ref(frame_index),
