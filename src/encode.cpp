@@ -75,17 +75,17 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                    << std::setprecision(5) << std::setfill('0') << 1.f << ' ';
 
         etctx->render_string_to_frame(
-            frame->source_frame(),
+            frame->source_frame_scene(),
             RenderTextContext::RenderPosition::RENDER_POSITION_LEFT_BOTTOM,
             std::string("index=") + std::to_string(frame->index()));
 
         etctx->render_string_to_frame(
-            frame->source_frame(),
+            frame->source_frame_scene(),
             RenderTextContext::RenderPosition::RENDER_POSITION_LEFT_TOP,
             timestamp());
 
         etctx->render_string_to_frame(
-            frame->source_frame(),
+            frame->source_frame_scene(),
             RenderTextContext::RenderPosition::RENDER_POSITION_CENTER,
             cam_matrix.str());
 
@@ -112,9 +112,11 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
   tlog::info() << "process_frame_thread: Exiting thread.";
 }
 
-void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                       std::shared_ptr<FrameMap> encode_queue,
-                       std::atomic<bool> &shutdown_requested) {
+void send_frame_thread(
+    std::shared_ptr<types::AVCodecContextManager> scene_codecctx,
+    std::shared_ptr<types::AVCodecContextManager> depth_codecctx,
+    std::shared_ptr<FrameMap> encode_queue,
+    std::atomic<bool> &shutdown_requested) {
   // set_thread_name("send_frame");
   uint64_t frame_index = 0;
   unsigned index = 0;
@@ -125,8 +127,36 @@ void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
       std::unique_ptr<RenderedFrame> processed_frame =
           encode_queue->get_delete(frame_index);
 
-      switch (ctxmgr->send_frame(
-          processed_frame->converted_frame().to_avframe().get())) {
+      switch (scene_codecctx->send_frame(
+          processed_frame->converted_frame_scene().to_avframe().get())) {
+        case AVERROR(EINVAL):
+          // Codec not opened, it is a decoder, or requires flush.
+          std::runtime_error{
+              "Codec not opened, it is a decoder, or requires flush."};
+          break;
+        case AVERROR(ENOMEM):
+          // Failed to add packet to internal queue, or similar other errors:
+          // legitimate encoding errors.
+          std::runtime_error{
+              "Failed to add packet to internal queue, or other."};
+          break;
+        case AVERROR_EOF:
+          // The encoder has been flushed, and no new frames can be sent to it.
+          std::runtime_error{
+              "The encoder has been flushed, and no new frames can be sent to "
+              "it."};
+          break;
+        case AVERROR(EAGAIN):
+          // Input is not accepted in the current state - user must read output
+          // with avcodec_receive_packet() (once all output is read, the packet
+          // should be resent, and the call will not fail with EAGAIN).
+        default:
+          // Success.
+          break;
+      }
+
+      switch (depth_codecctx->send_frame(
+          processed_frame->converted_frame_depth().to_avframe().get())) {
         case AVERROR(EINVAL):
           // Codec not opened, it is a decoder, or requires flush.
           std::runtime_error{

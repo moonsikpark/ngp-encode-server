@@ -10,20 +10,24 @@
 // created with a raw RGB image stored in m_source_avframe. The RGB image buffer
 // should be visible to other programs to make modifications such as overlaying
 // texts. It converts the RGB image to YUV image using swscale and stores it in
-// m_converted_avframe. After the image is ready, the program provides the
+// m_converted_avframe_scene. After the image is ready, the program provides the
 // converted image to the encoder.
 class RenderedFrame {
  public:
-  RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt,
+  RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt_scene,
+                AVPixelFormat pix_fmt_depth,
                 std::shared_ptr<types::AVCodecContextManager> ctxmgr);
 
   // Convert frame stored in m_source_avframe from RGB to YUV and store it in
-  // m_converted_avframe.
+  // m_converted_avframe_scene.
   inline void convert_frame() {
     if (m_converted) {
       throw std::runtime_error{"Tried to convert a converted RenderedFrame."};
     }
-    types::SwsContextManager sws_context(m_source_avframe, m_converted_avframe);
+    types::SwsContextManager sws_context_scene(m_source_avframe_scene,
+                                               m_converted_avframe_scene);
+    types::SwsContextManager sws_context_depth(m_source_avframe_depth,
+                                               m_converted_avframe_depth);
     m_converted = true;
   }
 
@@ -36,16 +40,28 @@ class RenderedFrame {
   }
 
   // Raw RGB frame.
-  inline types::FrameManager &source_frame() { return m_source_avframe; }
+  inline types::FrameManager &source_frame_scene() {
+    return m_source_avframe_scene;
+  }
 
   // Converted YUV frame.
-  inline types::FrameManager &converted_frame() { return m_converted_avframe; }
+  inline types::FrameManager &converted_frame_scene() {
+    return m_converted_avframe_scene;
+  }
+
+  // Converted YUV depth frame.
+  inline types::FrameManager &converted_frame_depth() {
+    return m_converted_avframe_depth;
+  }
 
  private:
   nesproto::RenderedFrame m_frame_response;
-  types::FrameManager m_source_avframe;
-  types::FrameManager m_converted_avframe;
-  AVPixelFormat m_pix_fmt;
+  types::FrameManager m_source_avframe_scene;
+  types::FrameManager m_converted_avframe_scene;
+  AVPixelFormat m_pix_fmt_scene;
+  types::FrameManager m_source_avframe_depth;
+  types::FrameManager m_converted_avframe_depth;
+  AVPixelFormat m_pix_fmt_depth;
   bool m_converted;
 };
 

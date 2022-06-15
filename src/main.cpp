@@ -138,12 +138,20 @@ int main(int argc, char **argv) {
         9998,
     };
 
-    ValueFlag<uint16_t> packet_stream_server_port{
+    ValueFlag<uint16_t> scene_packet_stream_server_port{
         parser,
-        "PACKET_STREAM_SERVER_PORT",
-        "Port the packet stream websocket server should bind to.",
-        {"packet_stream_server_port"},
+        "SCENE_PACKET_STREAM_SERVER_PORT",
+        "Port the scene packet stream websocket server should bind to.",
+        {"scene_packet_stream_server_port"},
         9999,
+    };
+
+    ValueFlag<uint16_t> depth_packet_stream_server_port{
+        parser,
+        "DEPTH_PACKET_STREAM_SERVER_PORT",
+        "Port the depth packet stream websocket server should bind to.",
+        {"depth_packet_stream_server_port"},
+        10000,
     };
 
     try {
@@ -168,7 +176,13 @@ int main(int argc, char **argv) {
 
     tlog::info() << "Initalizing encoder.";
 
-    auto ctxmgr = std::make_shared<types::AVCodecContextManager>(
+    auto scene_codecctx = std::make_shared<types::AVCodecContextManager>(
+        types::AVCodecContextManager::CodecInitInfo(
+            AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
+            get(encode_tune_flag), get(width_flag), get(height_flag),
+            get(bitrate_flag), get(fps_flag), get(keyint_flag)));
+
+    auto depth_codecctx = std::make_shared<types::AVCodecContextManager>(
         types::AVCodecContextManager::CodecInitInfo(
             AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
             get(encode_tune_flag), get(width_flag), get(height_flag),
@@ -177,16 +191,23 @@ int main(int argc, char **argv) {
     tlog::info() << "Initializing text renderer.";
     auto etctx = std::make_shared<RenderTextContext>(get(font_flag));
 
-    tlog::info() << "Initalizing PacketStreamServer context.";
-    auto mctx =
-        std::make_shared<PacketStreamServer>(get(packet_stream_server_port));
-    mctx->start();
+    tlog::info() << "Initalizing ScenePacketStreamServer context.";
+    auto scene_packet_stream_server = std::make_shared<PacketStreamServer>(
+        get(scene_packet_stream_server_port),
+        std::string("ScenePacketStreamServer"));
+    scene_packet_stream_server->start();
+
+    tlog::info() << "Initalizing DepthPacketStreamServer context.";
+    auto depth_packet_stream_server = std::make_shared<PacketStreamServer>(
+        get(depth_packet_stream_server_port),
+        std::string("DepthPacketStreamServer"));
+    depth_packet_stream_server->start();
 
     tlog::info() << "Initalizing queue.";
     auto frame_queue = std::make_shared<FrameQueue>();
     auto encode_queue = std::make_shared<FrameMap>();
-    auto cameramgr = std::make_shared<CameraManager>(ctxmgr, get(width_flag),
-                                                     get(height_flag));
+    auto cameramgr = std::make_shared<CameraManager>(
+        scene_codecctx, get(width_flag), get(height_flag));
 
     tlog::info() << "Initalizing camera control server.";
     auto ccsvr = std::make_shared<CameraControlServer>(
@@ -199,21 +220,29 @@ int main(int argc, char **argv) {
 
     std::vector<std::thread> threads;
 
-    std::thread _socket_main_thread(
-        socket_main_thread, get(renderer_addr_flag), frame_queue,
-        std::ref(frame_index), cameramgr, ctxmgr, std::ref(shutdown_requested));
+    std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag),
+                                    frame_queue, std::ref(frame_index),
+                                    cameramgr, scene_codecctx,
+                                    std::ref(shutdown_requested));
     threads.push_back(std::move(_socket_main_thread));
 
-    std::thread _process_frame_thread(process_frame_thread, ctxmgr, frame_queue,
-                                      encode_queue, etctx,
+    std::thread _process_frame_thread(process_frame_thread, scene_codecctx,
+                                      frame_queue, encode_queue, etctx,
                                       std::ref(shutdown_requested));
     threads.push_back(std::move(_process_frame_thread));
 
-    std::thread _receive_packet_thread(receive_packet_thread, ctxmgr, mctx,
-                                       std::ref(shutdown_requested));
-    threads.push_back(std::move(_receive_packet_thread));
+    std::thread _receive_packet_thread_scene(
+        receive_packet_thread, scene_codecctx, scene_packet_stream_server,
+        std::ref(shutdown_requested));
+    threads.push_back(std::move(_receive_packet_thread_scene));
 
-    std::thread _send_frame_thread(send_frame_thread, ctxmgr, encode_queue,
+    std::thread _receive_packet_thread_depth(
+        receive_packet_thread, depth_codecctx, depth_packet_stream_server,
+        std::ref(shutdown_requested));
+    threads.push_back(std::move(_receive_packet_thread_depth));
+
+    std::thread _send_frame_thread(send_frame_thread, scene_codecctx,
+                                   depth_codecctx, encode_queue,
                                    std::ref(shutdown_requested));
     threads.push_back(std::move(_send_frame_thread));
 
@@ -225,7 +254,8 @@ int main(int argc, char **argv) {
       th.join();
     }
 
-    mctx->stop();
+    depth_packet_stream_server->stop();
+    scene_packet_stream_server->stop();
     ccsvr->stop();
 
     tlog::info() << "All threads are terminated. Shutting down.";

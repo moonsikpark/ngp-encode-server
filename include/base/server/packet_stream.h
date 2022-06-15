@@ -14,8 +14,8 @@ extern "C" {
 
 class PacketStreamServer : public WebSocketServer {
  public:
-  PacketStreamServer(uint16_t bind_port)
-      : WebSocketServer(std::string("PacketStreamServer"), bind_port) {}
+  PacketStreamServer(uint16_t bind_port, std::string server_name)
+      : WebSocketServer(server_name, bind_port) {}
 
   inline void message_handler(websocketpp::connection_hdl hdl,
                               message_ptr msg) {}

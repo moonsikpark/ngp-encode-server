@@ -173,8 +173,8 @@ void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
     }
 
     // Create a new RenderedFrame.
-    std::unique_ptr<RenderedFrame> frame_o =
-        std::make_unique<RenderedFrame>(frame, AV_PIX_FMT_RGB24, ctxmgr);
+    std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(
+        frame, AV_PIX_FMT_RGB24, AV_PIX_FMT_GRAY8, ctxmgr);
 
     try {
       // Push the frame to the frame queue.

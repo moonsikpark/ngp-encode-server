@@ -19,9 +19,11 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                           std::shared_ptr<RenderTextContext> etctx,
                           std::atomic<bool> &shutdown_requested);
 
-void send_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                       std::shared_ptr<FrameMap> encode_queue,
-                       std::atomic<bool> &shutdown_requested);
+void send_frame_thread(
+    std::shared_ptr<types::AVCodecContextManager> scene_codecctx,
+    std::shared_ptr<types::AVCodecContextManager> depth_codecctx,
+    std::shared_ptr<FrameMap> encode_queue,
+    std::atomic<bool> &shutdown_requested);
 
 void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                            std::shared_ptr<PacketStreamServer> mctx,
