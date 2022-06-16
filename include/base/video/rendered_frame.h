@@ -16,7 +16,8 @@ class RenderedFrame {
  public:
   RenderedFrame(nesproto::RenderedFrame frame, AVPixelFormat pix_fmt_scene,
                 AVPixelFormat pix_fmt_depth,
-                std::shared_ptr<types::AVCodecContextManager> ctxmgr);
+                std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
+                std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth);
 
   // Convert frame stored in m_source_avframe from RGB to YUV and store it in
   // m_converted_avframe_scene.

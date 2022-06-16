@@ -176,13 +176,13 @@ int main(int argc, char **argv) {
 
     tlog::info() << "Initalizing encoder.";
 
-    auto scene_codecctx = std::make_shared<types::AVCodecContextManager>(
+    auto codec_scene_left = std::make_shared<types::AVCodecContextManager>(
         types::AVCodecContextManager::CodecInitInfo(
             AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
             get(encode_tune_flag), get(width_flag), get(height_flag),
             get(bitrate_flag), get(fps_flag), get(keyint_flag)));
 
-    auto depth_codecctx = std::make_shared<types::AVCodecContextManager>(
+    auto codec_depth_left = std::make_shared<types::AVCodecContextManager>(
         types::AVCodecContextManager::CodecInitInfo(
             AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, get(encode_preset_flag),
             get(encode_tune_flag), get(width_flag), get(height_flag),
@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
     auto frame_queue = std::make_shared<FrameQueue>();
     auto encode_queue = std::make_shared<FrameMap>();
     auto cameramgr = std::make_shared<CameraManager>(
-        scene_codecctx, get(width_flag), get(height_flag));
+        codec_scene_left, codec_depth_left, get(width_flag), get(height_flag));
 
     tlog::info() << "Initalizing camera control server.";
     auto ccsvr = std::make_shared<CameraControlServer>(
@@ -220,29 +220,29 @@ int main(int argc, char **argv) {
 
     std::vector<std::thread> threads;
 
-    std::thread _socket_main_thread(socket_main_thread, get(renderer_addr_flag),
-                                    frame_queue, std::ref(frame_index),
-                                    cameramgr, scene_codecctx,
-                                    std::ref(shutdown_requested));
+    std::thread _socket_main_thread(
+        socket_main_thread, get(renderer_addr_flag), frame_queue,
+        std::ref(frame_index), cameramgr, codec_scene_left, codec_depth_left,
+        std::ref(shutdown_requested));
     threads.push_back(std::move(_socket_main_thread));
 
-    std::thread _process_frame_thread(process_frame_thread, scene_codecctx,
+    std::thread _process_frame_thread(process_frame_thread, codec_scene_left,
                                       frame_queue, encode_queue, etctx,
                                       std::ref(shutdown_requested));
     threads.push_back(std::move(_process_frame_thread));
 
     std::thread _receive_packet_thread_scene(
-        receive_packet_thread, scene_codecctx, scene_packet_stream_server,
+        receive_packet_thread, codec_scene_left, scene_packet_stream_server,
         std::ref(shutdown_requested));
     threads.push_back(std::move(_receive_packet_thread_scene));
 
     std::thread _receive_packet_thread_depth(
-        receive_packet_thread, depth_codecctx, depth_packet_stream_server,
+        receive_packet_thread, codec_depth_left, depth_packet_stream_server,
         std::ref(shutdown_requested));
     threads.push_back(std::move(_receive_packet_thread_depth));
 
-    std::thread _send_frame_thread(send_frame_thread, scene_codecctx,
-                                   depth_codecctx, encode_queue,
+    std::thread _send_frame_thread(send_frame_thread, codec_scene_left,
+                                   codec_depth_left, encode_queue,
                                    std::ref(shutdown_requested));
     threads.push_back(std::move(_send_frame_thread));
 

@@ -20,7 +20,8 @@ class CameraManager {
 
   // Initialize Camera with kInitialCameraMatrix and provided default
   // dimensions.
-  CameraManager(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
+  CameraManager(std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
+                std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
                 uint32_t default_width, uint32_t default_height);
 
   // Replace camera with the provided camera data. If the resolution has
@@ -31,7 +32,8 @@ class CameraManager {
 
  private:
   nesproto::Camera m_camera;
-  std::shared_ptr<types::AVCodecContextManager> m_ctxmgr;
+  std::shared_ptr<types::AVCodecContextManager> m_ctxmgr_scene;
+  std::shared_ptr<types::AVCodecContextManager> m_ctxmgr_depth;
 };
 
 #endif  // NES_BASE_CAMERA_MANAGER_

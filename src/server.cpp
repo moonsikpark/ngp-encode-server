@@ -113,11 +113,13 @@ std::string socket_receive_blocking_lpf(int targetfd) {
 
 static constexpr unsigned kLogStatsIntervalFrame = 100;
 
-void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
-                          std::atomic<std::uint64_t> &frame_index,
-                          std::shared_ptr<CameraManager> cameramgr,
-                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                          std::atomic<bool> &shutdown_requested) {
+void socket_client_thread(
+    int targetfd, std::shared_ptr<FrameQueue> frame_queue,
+    std::atomic<std::uint64_t> &frame_index,
+    std::shared_ptr<CameraManager> cameramgr,
+    std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
+    std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
+    std::atomic<bool> &shutdown_requested) {
   // set_thread_name(std::string("socket_client=") + std::to_string(targetfd));
   int ret = 0;
   tlog::info() << "socket_client_thread (fd=" << targetfd << "): Spawned.";
@@ -172,9 +174,8 @@ void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
       }
     }
 
-    // Create a new RenderedFrame.
     std::unique_ptr<RenderedFrame> frame_o = std::make_unique<RenderedFrame>(
-        frame, AV_PIX_FMT_RGB24, AV_PIX_FMT_GRAY8, ctxmgr);
+        frame, AV_PIX_FMT_RGB24, AV_PIX_FMT_GRAY8, ctxmgr_scene, ctxmgr_depth);
 
     try {
       // Push the frame to the frame queue.
@@ -192,12 +193,13 @@ void socket_client_thread(int targetfd, std::shared_ptr<FrameQueue> frame_queue,
                << "): Exiting thread.";
 }
 
-void socket_manage_thread(std::string renderer,
-                          std::shared_ptr<FrameQueue> frame_queue,
-                          std::atomic<std::uint64_t> &frame_index,
-                          std::shared_ptr<CameraManager> cameramgr,
-                          std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                          std::atomic<bool> &shutdown_requested) {
+void socket_manage_thread(
+    std::string renderer, std::shared_ptr<FrameQueue> frame_queue,
+    std::atomic<std::uint64_t> &frame_index,
+    std::shared_ptr<CameraManager> cameramgr,
+    std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
+    std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
+    std::atomic<bool> &shutdown_requested) {
   // set_thread_name(std::string("socket_manage=") + renderer);
   int error_times = 0;
   while (!shutdown_requested) {
@@ -243,9 +245,9 @@ void socket_manage_thread(std::string renderer,
     tlog::success() << "socket_client_thread_factory(" << renderer
                     << "): Connected to " << renderer;
 
-    std::thread _socket_client_thread(socket_client_thread, fd, frame_queue,
-                                      std::ref(frame_index), cameramgr, ctxmgr,
-                                      std::ref(shutdown_requested));
+    std::thread _socket_client_thread(
+        socket_client_thread, fd, frame_queue, std::ref(frame_index), cameramgr,
+        ctxmgr_scene, ctxmgr_depth, std::ref(shutdown_requested));
 
     _socket_client_thread.join();
 
@@ -256,21 +258,22 @@ void socket_manage_thread(std::string renderer,
   }
 }
 
-void socket_main_thread(std::vector<std::string> renderers,
-                        std::shared_ptr<FrameQueue> frame_queue,
-                        std::atomic<std::uint64_t> &frame_index,
-                        std::shared_ptr<CameraManager> cameramgr,
-                        std::shared_ptr<types::AVCodecContextManager> ctxmgr,
-                        std::atomic<bool> &shutdown_requested) {
+void socket_main_thread(
+    std::vector<std::string> renderers, std::shared_ptr<FrameQueue> frame_queue,
+    std::atomic<std::uint64_t> &frame_index,
+    std::shared_ptr<CameraManager> cameramgr,
+    std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
+    std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
+    std::atomic<bool> &shutdown_requested) {
   // set_thread_name("socket_main");
   std::vector<std::thread> threads;
 
   tlog::info() << "socket_main_thread: Connecting to renderers.";
 
   for (const auto renderer : renderers) {
-    threads.push_back(std::thread(socket_manage_thread, renderer, frame_queue,
-                                  std::ref(frame_index), cameramgr, ctxmgr,
-                                  std::ref(shutdown_requested)));
+    threads.push_back(std::thread(
+        socket_manage_thread, renderer, frame_queue, std::ref(frame_index),
+        cameramgr, ctxmgr_scene, ctxmgr_depth, std::ref(shutdown_requested)));
   }
 
   tlog::info() << "socket_main_thread: Connectd to all renderers.";
