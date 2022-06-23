@@ -15,7 +15,11 @@ void CameraControlServer::message_handler(websocketpp::connection_hdl hdl,
   nesproto::Camera cam;
 
   if (cam.ParseFromString(msg->get_raw_payload())) {
-    m_camera_manager->set_camera(cam);
+    if (cam.is_left()) {
+      m_camera_manager->set_camera_left(cam);
+    } else {
+      m_camera_manager->set_camera_right(cam);
+    }
     if (m_message_count % kReceivedLoggingInterval == 0) {
       tlog::success() << "CameraControlServer: Receiving camera matrix...";
     }

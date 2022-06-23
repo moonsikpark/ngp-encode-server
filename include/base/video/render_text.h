@@ -33,6 +33,9 @@ class RenderTextContext {
  private:
   FT_Library _library;
   FT_Face _face;
+  std::mutex m_mutex;
+  std::condition_variable m_wait;
+  using unique_lock = std::unique_lock<std::mutex>;
 };
 
 #endif  // NES_BASE_VIDEO_RENDER_TEXT_

@@ -16,16 +16,21 @@
 #include "base/video/frame_queue.h"
 
 void socket_main_thread(
-    std::vector<std::string> renderers, std::shared_ptr<FrameQueue> frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
+    std::vector<std::string> renderers,
+    std::shared_ptr<FrameQueue> frame_queue_left,
+    std::shared_ptr<FrameQueue> frame_queue_right,
+    std::atomic<std::uint64_t> &frame_index_left,
+    std::atomic<std::uint64_t> &frame_index_right, std::atomic<int> &is_left,
     std::shared_ptr<CameraManager> cameramgr,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
     std::atomic<bool> &shutdown_requested);
 
 void socket_client_thread(
-    int targetfd, std::shared_ptr<FrameQueue> frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
+    int targetfd, std::shared_ptr<FrameQueue> frame_queue_left,
+    std::shared_ptr<FrameQueue> frame_queue_right,
+    std::atomic<std::uint64_t> &frame_index_left,
+    std::atomic<std::uint64_t> &frame_index_right, std::atomic<int> &is_left,
     std::shared_ptr<CameraManager> cameramgr,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,

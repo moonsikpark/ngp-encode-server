@@ -20,20 +20,27 @@ class CameraManager {
 
   // Initialize Camera with kInitialCameraMatrix and provided default
   // dimensions.
-  CameraManager(std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
-                std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
+  CameraManager(std::shared_ptr<types::AVCodecContextManager> codec_scene_left,
+                std::shared_ptr<types::AVCodecContextManager> codec_depth_left,
+                std::shared_ptr<types::AVCodecContextManager> codec_scene_right,
+                std::shared_ptr<types::AVCodecContextManager> codec_depth_right,
                 uint32_t default_width, uint32_t default_height);
 
   // Replace camera with the provided camera data. If the resolution has
   // changed, reinitialize the encoder.
-  void set_camera(nesproto::Camera camera);
+  void set_camera_left(nesproto::Camera camera);
+  void set_camera_right(nesproto::Camera camera);
 
-  inline nesproto::Camera get_camera() const { return m_camera; }
+  inline nesproto::Camera get_camera_left() const { return m_camera_left; }
+  inline nesproto::Camera get_camera_right() const { return m_camera_right; }
 
  private:
-  nesproto::Camera m_camera;
-  std::shared_ptr<types::AVCodecContextManager> m_ctxmgr_scene;
-  std::shared_ptr<types::AVCodecContextManager> m_ctxmgr_depth;
+  nesproto::Camera m_camera_left;
+  nesproto::Camera m_camera_right;
+  std::shared_ptr<types::AVCodecContextManager> m_codec_scene_left;
+  std::shared_ptr<types::AVCodecContextManager> m_codec_depth_left;
+  std::shared_ptr<types::AVCodecContextManager> m_codec_scene_right;
+  std::shared_ptr<types::AVCodecContextManager> m_codec_depth_right;
 };
 
 #endif  // NES_BASE_CAMERA_MANAGER_

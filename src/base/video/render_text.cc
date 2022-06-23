@@ -35,6 +35,8 @@ RenderTextContext::RenderTextContext(std::string font_location) {
 void RenderTextContext::render_string_to_frame(
     types::FrameManager &frame, RenderTextContext::RenderPosition opt,
     std::string content) {
+  unique_lock lock(m_mutex);
+  m_wait.wait(lock, [] { return true; });
   uint8_t *surface = frame.data().data[0];
   uint32_t width = frame.context().width;
   uint32_t height = frame.context().height;

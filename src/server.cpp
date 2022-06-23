@@ -114,8 +114,10 @@ std::string socket_receive_blocking_lpf(int targetfd) {
 static constexpr unsigned kLogStatsIntervalFrame = 100;
 
 void socket_client_thread(
-    int targetfd, std::shared_ptr<FrameQueue> frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
+    int targetfd, std::shared_ptr<FrameQueue> frame_queue_left,
+    std::shared_ptr<FrameQueue> frame_queue_right,
+    std::atomic<std::uint64_t> &frame_index_left,
+    std::atomic<std::uint64_t> &frame_index_right, std::atomic<int> &is_left,
     std::shared_ptr<CameraManager> cameramgr,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
@@ -136,10 +138,25 @@ void socket_client_thread(
     }
 
     nesproto::FrameRequest req;
+    //  is_left xor true op has same effect as not op
+    //    t xor t = f (not t)
+    //    f xor t = t (not f)
+    bool is_left_val = is_left.fetch_xor(true);
+    req.set_is_left(is_left_val);
 
-    req.set_index(frame_index.fetch_add(1));
-    // set_allocated_* destroys the object.
-    req.mutable_camera()->CopyFrom(cameramgr->get_camera());
+    uint64_t frame_index;
+    if (is_left_val) {
+      frame_index = frame_index_left.fetch_add(1);
+    } else {
+      frame_index = frame_index_right.fetch_add(1);
+    }
+    req.set_index(frame_index);
+    // set_allocated_* destroys the object. Use mutable_*()->CopyFrom().
+    if (is_left_val) {
+      req.mutable_camera()->CopyFrom(cameramgr->get_camera_left());
+    } else {
+      req.mutable_camera()->CopyFrom(cameramgr->get_camera_right());
+    }
 
     std::string req_serialized = req.SerializeAsString();
 
@@ -163,7 +180,6 @@ void socket_client_thread(
       }
       count++;
       elapsed += timer.elapsed().count();
-
       if (count == kLogStatsIntervalFrame) {
         tlog::debug() << "socket_client_thread (fd=" << targetfd
                       << "): Frame receiving average time of "
@@ -179,7 +195,11 @@ void socket_client_thread(
 
     try {
       // Push the frame to the frame queue.
-      frame_queue->push(std::move(frame_o));
+      if (frame_o->is_left()) {
+        frame_queue_left->push(std::move(frame_o));
+      } else {
+        frame_queue_right->push(std::move(frame_o));
+      }
     } catch (const LockTimeout &) {
       // It takes too much time to acquire a lock of frame_queue. Drop the
       // frame. BUG: If we drop the frame, the program will hang and look for
@@ -194,8 +214,10 @@ void socket_client_thread(
 }
 
 void socket_manage_thread(
-    std::string renderer, std::shared_ptr<FrameQueue> frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
+    std::string renderer, std::shared_ptr<FrameQueue> frame_queue_left,
+    std::shared_ptr<FrameQueue> frame_queue_right,
+    std::atomic<std::uint64_t> &frame_index_left,
+    std::atomic<std::uint64_t> &frame_index_right, std::atomic<int> &is_left,
     std::shared_ptr<CameraManager> cameramgr,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
@@ -246,8 +268,10 @@ void socket_manage_thread(
                     << "): Connected to " << renderer;
 
     std::thread _socket_client_thread(
-        socket_client_thread, fd, frame_queue, std::ref(frame_index), cameramgr,
-        ctxmgr_scene, ctxmgr_depth, std::ref(shutdown_requested));
+        socket_client_thread, fd, frame_queue_left, frame_queue_right,
+        std::ref(frame_index_left), std::ref(frame_index_right),
+        std::ref(is_left), cameramgr, ctxmgr_scene, ctxmgr_depth,
+        std::ref(shutdown_requested));
 
     _socket_client_thread.join();
 
@@ -259,8 +283,11 @@ void socket_manage_thread(
 }
 
 void socket_main_thread(
-    std::vector<std::string> renderers, std::shared_ptr<FrameQueue> frame_queue,
-    std::atomic<std::uint64_t> &frame_index,
+    std::vector<std::string> renderers,
+    std::shared_ptr<FrameQueue> frame_queue_left,
+    std::shared_ptr<FrameQueue> frame_queue_right,
+    std::atomic<std::uint64_t> &frame_index_left,
+    std::atomic<std::uint64_t> &frame_index_right, std::atomic<int> &is_left,
     std::shared_ptr<CameraManager> cameramgr,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_scene,
     std::shared_ptr<types::AVCodecContextManager> ctxmgr_depth,
@@ -271,9 +298,11 @@ void socket_main_thread(
   tlog::info() << "socket_main_thread: Connecting to renderers.";
 
   for (const auto renderer : renderers) {
-    threads.push_back(std::thread(
-        socket_manage_thread, renderer, frame_queue, std::ref(frame_index),
-        cameramgr, ctxmgr_scene, ctxmgr_depth, std::ref(shutdown_requested)));
+    threads.push_back(
+        std::thread(socket_manage_thread, renderer, frame_queue_left,
+                    frame_queue_right, std::ref(frame_index_left),
+                    std::ref(frame_index_right), std::ref(is_left), cameramgr,
+                    ctxmgr_scene, ctxmgr_depth, std::ref(shutdown_requested)));
   }
 
   tlog::info() << "socket_main_thread: Connectd to all renderers.";

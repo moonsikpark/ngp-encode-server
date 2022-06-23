@@ -35,8 +35,10 @@ class RenderedFrame {
   // Index of the frame.
   const inline uint64_t index() const { return this->m_frame_response.index(); }
 
+  const inline bool is_left() const { return this->m_frame_response.is_left(); }
+
   // Camera FOV and coordinate of the frame.
-  const inline nesproto::Camera get_cam() const {
+  const inline nesproto::Camera &get_cam() const {
     return this->m_frame_response.camera();
   }
 

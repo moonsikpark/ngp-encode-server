@@ -29,7 +29,8 @@ void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
                            std::shared_ptr<PacketStreamServer> mctx,
                            std::atomic<bool> &shutdown_requested);
 
-void encode_stats_thread(std::atomic<std::uint64_t> &frame_index,
+void encode_stats_thread(std::atomic<std::uint64_t> &frame_index_left,
+                         std::atomic<std::uint64_t> &frame_index_right,
                          std::atomic<bool> &shutdown_requested);
 
 #endif  // _ENCODE_H_

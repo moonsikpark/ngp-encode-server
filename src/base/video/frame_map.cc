@@ -41,7 +41,7 @@ FrameMap::element FrameMap::get_delete(FrameMap::keytype index) {
 
       if (count) {
         tlog::error() << "FrameMap: " << count
-                      << "frames dropped; current index=" << index;
+                      << " frame(s) dropped; current index=" << index;
       }
     }
     // Notify one of the threads waiting to insert to the map.

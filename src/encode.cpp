@@ -54,7 +54,6 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
       {
         ScopedTimer timer;
         uint64_t frame_index = frame->index();
-
         std::stringstream cam_matrix;
         int idx = 0;
         for (auto it : frame->get_cam().matrix()) {
@@ -76,6 +75,11 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 
         etctx->render_string_to_frame(
             frame->source_frame_scene(),
+            RenderTextContext::RenderPosition::RENDER_POSITION_CENTER,
+            cam_matrix.str());
+
+        etctx->render_string_to_frame(
+            frame->source_frame_scene(),
             RenderTextContext::RenderPosition::RENDER_POSITION_LEFT_BOTTOM,
             std::string("index=") + std::to_string(frame->index()));
 
@@ -84,11 +88,13 @@ void process_frame_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
             RenderTextContext::RenderPosition::RENDER_POSITION_LEFT_TOP,
             timestamp());
 
+        std::string direction =
+            frame->is_left() ? "direction=left" : "direction=right";
+
         etctx->render_string_to_frame(
             frame->source_frame_scene(),
-            RenderTextContext::RenderPosition::RENDER_POSITION_CENTER,
-            cam_matrix.str());
-
+            RenderTextContext::RenderPosition::RENDER_POSITION_RIGHT_TOP,
+            direction);
         frame->convert_frame();
 
         encode_queue->insert(frame_index, std::move(frame));
@@ -263,14 +269,15 @@ void receive_packet_thread(std::shared_ptr<types::AVCodecContextManager> ctxmgr,
 
 static constexpr unsigned kEncodeStatsLogIntervalSeconds = 10;
 
-void encode_stats_thread(std::atomic<std::uint64_t> &frame_index,
+void encode_stats_thread(std::atomic<std::uint64_t> &frame_index_left,
+                         std::atomic<std::uint64_t> &frame_index_right,
                          std::atomic<bool> &shutdown_requested) {
   // set_thread_name("encode_stats");
   uint64_t previous_index = 0;
   uint64_t seconds = 0;
   while (!shutdown_requested) {
     seconds++;
-    uint64_t current_index = frame_index.load();
+    uint64_t current_index = frame_index_left.load() + frame_index_right.load();
     if (seconds == kEncodeStatsLogIntervalSeconds) {
       tlog::info() << "encode_stats_thread: Average frame rate of the last "
                    << kEncodeStatsLogIntervalSeconds
